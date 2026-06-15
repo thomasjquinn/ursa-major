@@ -5,14 +5,14 @@
 #' 
 #' @param bam_location The directory containing BAM files.
 #' @param bam_txt_list Optional newline separated text file of filenames of bam files. File must be located in bam_location directory. 
-#' @param target_strand A character string indicating the strand. Supports two values; '+' and '-'.
 #' @param low_coverage_cutoff An integer indicating the low coverage threshold value.
 #' @param high_coverage_cutoff An integer indicating the high coverage threshold value.
 #' @param peak_width An integer indicating the minimum peak width.
 #' @param paired_end_data A boolean indicating if the reads are paired-end.
 #' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely stranded.
 #' 
-#' @return An object of IRanges class, containing the genomic coordinates of selected and unified peaks.
+#' @return A named list with two IRanges objects, `plus` and `minus`, holding the
+#'   unified peak coordinates for each strand.
 #' 
 #' @import IRanges
 #' @import GenomicAlignments
@@ -20,63 +20,59 @@
 #' @importFrom utils capture.output read.csv read.delim write.table
 #'
 #' @export
-peak_union_calc <- function(bam_location = ".", bam_txt_list = "", target_strand, low_coverage_cutoff, high_coverage_cutoff,  peak_width, paired_end_data = FALSE, strandedness  = "unstranded") {
+peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_cutoff, high_coverage_cutoff, peak_width, paired_end_data = FALSE, strandedness = "unstranded") {
   ## Find all BAM files in the directory.
   if (bam_txt_list != ""){
     bam_files <- readLines(bam_txt_list)
-    bam_files <- lapply(bam_files, function(x) paste(bam_location, x, sep="/"))
-  }else{
+    bam_files <- lapply(bam_files, function(x) paste(bam_location, x, sep = "/"))
+  } else {
     bam_files <- list.files(path = bam_location, pattern = ".BAM$", full.names = TRUE, ignore.case = TRUE)
   }
-  peak_union <- IRanges()
-  ## Go over each BAM file to extract coverage peaks for a target strand and gradually build a union of all peak sets.
-  for (f in bam_files) {
-    ## Read a BAM file in accordance with its type and select only the reads aligning to a target strand.
-    strand_alignment <- c()
-    if (!paired_end_data & strandedness  == "stranded") {
-      file_alignment <- readGAlignments(f)
-      strand_alignment <- file_alignment[strand(file_alignment)==target_strand,]
-    } else if (paired_end_data & strandedness  == "stranded") {
-      file_alignment <- readGAlignmentPairs(f, strandMode = 1)
-      strand_alignment_unmerged <- file_alignment[strand(file_alignment)==target_strand,]
-      #coerce to get single ranges
-      strand_alignment <- granges(strand_alignment_unmerged)
-    } else if (!paired_end_data & strandedness  == "reversely_stranded") {
-      file_alignment <- readGAlignments(f)
-      relevant_strand <- c()
-      if (target_strand=="+") {
-        relevant_strand <- "-"
-      } else {
-        relevant_strand <- "+"
-      }
-      strand_alignment <- file_alignment[strand(file_alignment)==relevant_strand,]
-    } else if (paired_end_data & strandedness  == "reversely_stranded") {
-      file_alignment <- readGAlignmentPairs(f, strandMode = 2)
-      strand_alignment_unmerged <- file_alignment[strand(file_alignment)==target_strand,]
-      #coerce to get single ranges
-      strand_alignment <- granges(strand_alignment_unmerged)
-    }
-    ## Create a strand coverage vector and extract it
-    strand_cvg <- coverage(strand_alignment)
+
+  ## Helper: selected peak IRanges for one strand's reads.
+  compute_strand_peaks <- function(reads, f) {
+    strand_cvg <- coverage(reads)
     list_components <- names(strand_cvg)
-    target <- c()
-    if (length(list_components)==1) {
-      target <- list_components
-    } else {
+    if (length(list_components) != 1) {
       stop(paste("Invalid BAM file:", f, sep = " "))
     }
-    ## Cut the coverage vector to obtain the expression peaks with the coverage above the low cut-off values.
-    peaks <- IRanges::slice(strand_cvg[[target]], lower = low_coverage_cutoff, includeLower=TRUE)
-    ## Examine the peaks for the stretches of coverage above the high cut-off. The stretches have to be a defined width.
-    test <- viewApply(peaks, function(x) peak_analysis(x,high_coverage_cutoff,peak_width))
-    ## Select only the peaks that satisfy the high cut-off condition.
-    selected_peaks <- peaks[vapply(test, function(x) !is.null(x), logical(1))]
-    ## Convert peak coordinates into IRanges.
-    peaks_IRange <- IRanges(start = start(selected_peaks), end = end(selected_peaks))
-    ## Calculate the peak union in with the previous peak sets.
-    peak_union <- union(peak_union,peaks_IRange)
+    target <- list_components
+    ## Cut the coverage vector to obtain the expression peaks above the low cut-off.
+    strand_rle <- strand_cvg[[target]]
+    peaks <- IRanges::slice(strand_rle, lower = low_coverage_cutoff, includeLower = TRUE)
+    ## Count, per peak, the positions above the high cut-off, then keep the peaks
+    ## whose count exceeds the minimum width. This reproduces the count-based test.
+    above_high_rle <- strand_rle > high_coverage_cutoff
+    above_high_views <- Views(above_high_rle, ranges(peaks))
+    positions_above <- viewSums(above_high_views)
+    selected_peaks <- peaks[positions_above > peak_width]
+    IRanges(start = start(selected_peaks), end = end(selected_peaks))
   }
-  return(peak_union)
+
+  plus_union  <- IRanges()
+  minus_union <- IRanges()
+  ## Read each BAM once, split by strand, and accumulate both peak unions.
+  for (f in bam_files) {
+    if (paired_end_data) {
+      strand_mode <- if (strandedness == "reversely_stranded") 2 else 1
+      file_alignment <- granges(readGAlignmentPairs(f, strandMode = strand_mode))
+    } else {
+      file_alignment <- readGAlignments(f)
+    }
+    reads_plus  <- file_alignment[strand(file_alignment) == "+"]
+    reads_minus <- file_alignment[strand(file_alignment) == "-"]
+    ## Single-end reversely-stranded data interprets the read strand in reverse.
+    if (!paired_end_data & strandedness == "reversely_stranded") {
+      plus_reads  <- reads_minus
+      minus_reads <- reads_plus
+    } else {
+      plus_reads  <- reads_plus
+      minus_reads <- reads_minus
+    }
+    plus_union  <- union(plus_union,  compute_strand_peaks(plus_reads,  f))
+    minus_union <- union(minus_union, compute_strand_peaks(minus_reads, f))
+  }
+  return(list(plus = plus_union, minus = minus_union))
 }
 
 #' Peak checking for the second coverage threshold and width.
@@ -242,16 +238,17 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
   
   ## Join the sRNA and UTR ranges together.
   sRNA_UTR <- c(sRNA_IRanges, UTR_IRanges)
+  n_features <- length(sRNA_UTR)
   
   ## Create information to go into corresponding columns.
-  seqid <- rep(major_strand_features[1,1],nrow(as.data.frame(sRNA_UTR)))
-  empty_col <- rep(".",nrow(as.data.frame(sRNA_UTR)))
+  seqid <- rep(major_strand_features[1,1], n_features)
+  empty_col <- rep(".", n_features)
   ## Create a dataframe for sRNAs and UTRs with all GFF3 file columns.
   cmp_strand <- data.frame()
   if (target_strand=="+") {
-    cmp_strand <- data.frame(seqid, empty_col, empty_col, as.integer(start(sRNA_UTR)), as.integer(end(sRNA_UTR)), empty_col, rep("+", nrow(as.data.frame(sRNA_UTR))), empty_col, names(sRNA_UTR), stringsAsFactors = FALSE)
+    cmp_strand <- data.frame(seqid, empty_col, empty_col, as.integer(start(sRNA_UTR)), as.integer(end(sRNA_UTR)), empty_col, rep("+", n_features), empty_col, names(sRNA_UTR), stringsAsFactors = FALSE)
   } else if (target_strand== "-") {
-    cmp_strand <- data.frame(seqid, empty_col, empty_col, as.integer(start(sRNA_UTR)), as.integer(end(sRNA_UTR)), empty_col, rep("-", nrow(as.data.frame(sRNA_UTR))), empty_col, names(sRNA_UTR), stringsAsFactors = FALSE)
+    cmp_strand <- data.frame(seqid, empty_col, empty_col, as.integer(start(sRNA_UTR)), as.integer(end(sRNA_UTR)), empty_col, rep("-", n_features), empty_col, names(sRNA_UTR), stringsAsFactors = FALSE)
   } else {
     stop("Select strand")
   }
@@ -328,7 +325,8 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
   test <- list.files(path = bam_directory, pattern = ".BAM$", full.names = TRUE, ignore.case = TRUE)
   if (length(test) > 0){
     ## Plus strand
-    plus_strand_peaks <- peak_union_calc(bam_location = bam_directory, bam_txt_list = bam_list, "+", low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, paired_end_data, strandedness)
+    peak_sets <- peak_union_calc(bam_location = bam_directory, bam_txt_list = bam_list, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, paired_end_data, strandedness)
+    plus_strand_peaks  <- peak_sets$plus
     message("Extracted plus strand data from BAM files")
     maj_plus_features <- major_features(original_annotation_file, annot_file_directory = annot_file_dir, "+", original_sRNA_annotation)
     plus_sRNA <- sRNA_calc(maj_plus_features, "+", plus_strand_peaks)
@@ -336,7 +334,7 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
     plus_annot_dataframe <- strand_feature_editor("+", plus_sRNA, plus_UTR, maj_plus_features)
     message("Built plus strand annotation dataframe")
     ## Minus strand
-    minus_strand_peaks <- peak_union_calc(bam_location = bam_directory, bam_txt_list = bam_list, "-", low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, paired_end_data, strandedness)
+    minus_strand_peaks <- peak_sets$minus
     message("Extracted minus strand data from BAM files")
     maj_minus_features <- major_features(original_annotation_file, annot_file_directory = annot_file_dir, "-", original_sRNA_annotation)
     minus_sRNA <- sRNA_calc(maj_minus_features, "-", minus_strand_peaks)
@@ -386,3 +384,4 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
 
 #commit1 completed
 #commit2 completed
+#commit3 completed
