@@ -33,15 +33,15 @@ peak_union_calc <- function(bam_location = ".", bam_txt_list = "", target_strand
   for (f in bam_files) {
     ## Read a BAM file in accordance with its type and select only the reads aligning to a target strand.
     strand_alignment <- c()
-    if (paired_end_data == FALSE & strandedness  == "stranded") {
+    if (!paired_end_data & strandedness  == "stranded") {
       file_alignment <- readGAlignments(f)
       strand_alignment <- file_alignment[strand(file_alignment)==target_strand,]
-    } else if (paired_end_data == TRUE & strandedness  == "stranded") {
+    } else if (paired_end_data & strandedness  == "stranded") {
       file_alignment <- readGAlignmentPairs(f, strandMode = 1)
       strand_alignment_unmerged <- file_alignment[strand(file_alignment)==target_strand,]
       #coerce to get single ranges
       strand_alignment <- granges(strand_alignment_unmerged)
-    } else if (paired_end_data == FALSE & strandedness  == "reversely_stranded") {
+    } else if (!paired_end_data & strandedness  == "reversely_stranded") {
       file_alignment <- readGAlignments(f)
       relevant_strand <- c()
       if (target_strand=="+") {
@@ -50,7 +50,7 @@ peak_union_calc <- function(bam_location = ".", bam_txt_list = "", target_strand
         relevant_strand <- "+"
       }
       strand_alignment <- file_alignment[strand(file_alignment)==relevant_strand,]
-    } else if (paired_end_data == TRUE & strandedness  == "reversely_stranded") {
+    } else if (paired_end_data & strandedness  == "reversely_stranded") {
       file_alignment <- readGAlignmentPairs(f, strandMode = 2)
       strand_alignment_unmerged <- file_alignment[strand(file_alignment)==target_strand,]
       #coerce to get single ranges
@@ -70,7 +70,7 @@ peak_union_calc <- function(bam_location = ".", bam_txt_list = "", target_strand
     ## Examine the peaks for the stretches of coverage above the high cut-off. The stretches have to be a defined width.
     test <- viewApply(peaks, function(x) peak_analysis(x,high_coverage_cutoff,peak_width))
     ## Select only the peaks that satisfy the high cut-off condition.
-    selected_peaks <- peaks[lapply(test, function(x) !is.null(x))==TRUE]
+    selected_peaks <- peaks[vapply(test, function(x) !is.null(x), logical(1))]
     ## Convert peak coordinates into IRanges.
     peaks_IRange <- IRanges(start = start(selected_peaks), end = end(selected_peaks))
     ## Calculate the peak union in with the previous peak sets.
@@ -130,11 +130,11 @@ major_features <- function(annotation_file, annot_file_directory = ".", target_s
   if (original_sRNA_annotation=="unknown") {
     ori_sRNA_biotype <- "biotype=.*?[^tr]RNA;"
   } else {
-    ori_sRNA_biotype <- paste("biotype=", original_sRNA_annotation, sep = "")
+    ori_sRNA_biotype <- paste0("biotype=", original_sRNA_annotation)
   }
   
   ## Select only the major genomic features: remove all child features (like CDS, mRNA etc.), previously annotated sRNAs and extra features
-  major_f <- gff[grepl("Parent", gff[,9], ignore.case = TRUE)==FALSE & gff[,3]!='chromosome' & gff[,3]!='biological_region' & grepl(ori_sRNA_biotype, gff[,9], ignore.case = TRUE)==FALSE & gff[,3]!='region' & gff[,3]!='sequence_feature',]
+  major_f <- gff[!grepl("Parent", gff[,9], ignore.case = TRUE) & gff[,3]!='chromosome' & gff[,3]!='biological_region' & !grepl(ori_sRNA_biotype, gff[,9], ignore.case = TRUE) & gff[,3]!='region' & gff[,3]!='sequence_feature',]
   ## Select only major features for the target strand.
   m_strand_features <- data.frame()
   if (target_strand=="+") {
@@ -173,9 +173,9 @@ sRNA_calc <- function(major_strand_features, target_strand, union_peak_ranges) {
   IGR_sRNAs <- union_peak_ranges[match(union_peak_ranges, subsetByOverlaps(union_peak_ranges, strand_IRange, maxgap = 1L)) == 0,]
   ## Construct the IDs for the new sRNAs to be added into the attribute column of the annotation.
   if (target_strand=="+") {
-    names(IGR_sRNAs) <- apply(as.data.frame(IGR_sRNAs),1, function(x) paste("ID=putative_sRNA:p", x[1], "_", x[2], ";", sep = ''))
+    names(IGR_sRNAs) <- apply(as.data.frame(IGR_sRNAs),1, function(x) paste0("ID=putative_sRNA:p", x[1], "_", x[2], ";"))
   } else if (target_strand== "-") {
-    names(IGR_sRNAs) <- apply(as.data.frame(IGR_sRNAs),1, function(x) paste("ID=putative_sRNA:m", x[1], "_", x[2], ";", sep = ''))
+    names(IGR_sRNAs) <- apply(as.data.frame(IGR_sRNAs),1, function(x) paste0("ID=putative_sRNA:m", x[1], "_", x[2], ";"))
   } else {
     stop("Select strand")
   }
@@ -214,9 +214,9 @@ UTR_calc <- function(major_strand_features, target_strand, union_peak_ranges, mi
   UTRs <- UTRs[width(UTRs)>=min_UTR_length,]
   ## Construct the IDs for the new UTRs to be added into the attribute column of the annotation.
   if (target_strand=="+") {
-    names(UTRs) <- apply(as.data.frame(UTRs),1, function(x) paste("ID=putative_UTR:p", x[1], "_", x[2],";", sep = ''))
+    names(UTRs) <- apply(as.data.frame(UTRs),1, function(x) paste0("ID=putative_UTR:p", x[1], "_", x[2],";"))
   } else if (target_strand== "-") {
-    names(UTRs) <- apply(as.data.frame(UTRs),1, function(x) paste("ID=putative_UTR:m", x[1], "_", x[2],";", sep = ''))
+    names(UTRs) <- apply(as.data.frame(UTRs),1, function(x) paste0("ID=putative_UTR:m", x[1], "_", x[2],";"))
   } else {
     stop("Select strand")
   }
@@ -283,9 +283,9 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
       feature_attribute <- c()
       
       if (target_strand=="+") {
-        feature_attribute <- paste(cmp_strand[i,9],"upstream_feature=", previous_feature_name, ";downstream_feature=", next_feature_name, sep = "")
+        feature_attribute <- paste0(cmp_strand[i,9],"upstream_feature=", previous_feature_name, ";downstream_feature=", next_feature_name)
       } else if (target_strand== "-") {
-        feature_attribute <- paste(cmp_strand[i,9],"upstream_feature=", next_feature_name, ";downstream_feature=", previous_feature_name, sep = "")
+        feature_attribute <- paste0(cmp_strand[i,9],"upstream_feature=", next_feature_name, ";downstream_feature=", previous_feature_name)
       } else {
         stop("Select strand")
       }
@@ -329,20 +329,20 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
   if (length(test) > 0){
     ## Plus strand
     plus_strand_peaks <- peak_union_calc(bam_location = bam_directory, bam_txt_list = bam_list, "+", low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, paired_end_data, strandedness)
-    print("Extracted plus strand data from BAM files")
+    message("Extracted plus strand data from BAM files")
     maj_plus_features <- major_features(original_annotation_file, annot_file_directory = annot_file_dir, "+", original_sRNA_annotation)
     plus_sRNA <- sRNA_calc(maj_plus_features, "+", plus_strand_peaks)
     plus_UTR <- UTR_calc(maj_plus_features, "+", plus_strand_peaks, min_sRNA_length)
     plus_annot_dataframe <- strand_feature_editor("+", plus_sRNA, plus_UTR, maj_plus_features)
-    print("Built plus strand annotation dataframe")
+    message("Built plus strand annotation dataframe")
     ## Minus strand
     minus_strand_peaks <- peak_union_calc(bam_location = bam_directory, bam_txt_list = bam_list, "-", low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, paired_end_data, strandedness)
-    print("Extracted minus strand data from BAM files")
+    message("Extracted minus strand data from BAM files")
     maj_minus_features <- major_features(original_annotation_file, annot_file_directory = annot_file_dir, "-", original_sRNA_annotation)
     minus_sRNA <- sRNA_calc(maj_minus_features, "-", minus_strand_peaks)
     minus_UTR <- UTR_calc(maj_minus_features, "-", minus_strand_peaks, min_UTR_length)
     minus_annot_dataframe <- strand_feature_editor("-", minus_sRNA, minus_UTR, maj_minus_features)
-    print("Built minus strand annotation dataframe")
+    message("Built minus strand annotation dataframe")
   
     ## Creating the final annotation dataframe by combining both strand dataframe and adding missing information like child features from the original GFF3 file.
     annot_file_loc <- c()
@@ -358,13 +358,13 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
     annotation_dataframe <- unique(annotation_dataframe)
     ## Order the dataframe by feature start coordinates.
     annotation_dataframe <- annotation_dataframe[order(annotation_dataframe[,4]),]
-    print("Prepared complete annotation dataframe")
+    message("Prepared complete annotation dataframe")
   
     ## Restore the original header.
     f <- readLines(annot_file_loc)
     header <- c()
     i <- 1
-    while (grepl("#",f[i])==TRUE) {
+    while (grepl("#", f[i], fixed = TRUE)) {
       f_line <- f[i]
       header <- c(header,f_line)
       i <- i+1
@@ -372,16 +372,17 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
     # add a line to indicate the origin of the file (single # commas should be ignored by programs)
     header <- c(header, "# produced by baerhunter")
   
-    print("Building output file now")
+    message("Building output file now")
   
     ## Create the final GFF3 file.
     write.table(header, output_file, sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
     write.table(annotation_dataframe, output_file, sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
   
-    return("Done!")
+    invisible(output_file)
   }else{
     stop("No BAMs in bam directory!")
   }
 }
 
 #commit1 completed
+#commit2 completed

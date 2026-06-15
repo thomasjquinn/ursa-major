@@ -5,8 +5,8 @@
 #' @param count_table A CSV file containing feature counts for each sample.
 #' @param complete_ann A GFF3 annotation file or SAF dataframe
 #' @param feature_type A string indicating desired feature type(s) from annotation.
-#' @param is_gff A boolean indicating whether annotation is gff file, default=T
-#' @param excl_rna A boolean indicating if misc RNA features (rRNA, tRNA) are excluded from normalisation. (Defaults=T)
+#' @param is_gff A boolean indicating whether annotation is gff file, default=TRUE
+#' @param excl_rna A boolean indicating if misc RNA features (rRNA, tRNA) are excluded from normalisation. (Defaults=TRUE)
 #' @param output_file A string indicating the name of the output file.
 #'
 #' @return A dataframe with TPM values for each gene and sample; the same is written into the output file.
@@ -15,14 +15,14 @@
 #' @importFrom utils read.delim write.table
 #'
 #' @export
-tpm_normalisation <- function(count_table, complete_ann, feature_type = c("putative_sRNA", "putative_UTR"), is_gff = T, output_file = NA, excl_rna = T) {
+tpm_normalisation <- function(count_table, complete_ann, feature_type = c("putative_sRNA", "putative_UTR"), is_gff = TRUE, output_file = NA, excl_rna = TRUE) {
   ## check output directory exists
-  if (is.na(output_file)==FALSE) {
+  if (!is.na(output_file)) {
     out_dir <- dirname(output_file)
     stopifnot("Output directory doesn't exist." = dir.exists(out_dir))
   }
   ## make saf from gff (uses make_saf function)
-  if (is_gff == T){
+  if (is_gff){
     nsaf_df <- make_saf(ann_file=complete_ann, exclude = excl_rna)
   }else{
     nsaf_df <- complete_ann
@@ -62,7 +62,7 @@ tpm_normalisation <- function(count_table, complete_ann, feature_type = c("putat
   rownames(tpm_df) <- feature_names
 
   ## If the output file is set by the user, write the TPM dataframe into it.
-  if (is.na(output_file)==FALSE) {
+  if (!is.na(output_file)) {
     write.table(tpm_df, output_file, sep = "\t")
   }
   return(tpm_df)
@@ -111,7 +111,7 @@ tpm_flagging <- function(tpm_data, complete_annotation, output_file) {
     feature_name <- sub(".*?ID=(.*?:.*?);.*", "\\1", i)
 
     if (feature_name %in% flag_names) {
-      new_line <- paste(i, ";expression_flag=", flags[feature_name], sep = "")
+      new_line <- paste0(i, ";expression_flag=", flags[feature_name])
       new_annot <- c(new_annot, new_line)
     } else {
       new_annot <- c(new_annot, i)
@@ -144,13 +144,13 @@ tpm_flag_filtering <- function(flagged_annotation_file, target_features = c("put
 
   # An internal function to go examine a table row: all target features are checked and filtered by the desired flag; all the other features are kept.
   selection <- function(table_row, target_features, target_flag) {
-    if ((as.character(table_row[[3]]) %in% target_features)==TRUE) {
-      if (grepl(target_flag, as.character(table_row[[9]]), ignore.case = TRUE)==TRUE){
+    if (as.character(table_row[[3]]) %in% target_features) {
+      if (grepl(target_flag, as.character(table_row[[9]]), ignore.case = TRUE)){
         return(TRUE)
       }else{
         return(FALSE)
       }
-    } else if ((as.character(table_row[[3]]) %in% target_features)==FALSE) {
+    } else if (!(as.character(table_row[[3]]) %in% target_features)) {
       return(TRUE)
     }
   }
@@ -158,20 +158,20 @@ tpm_flag_filtering <- function(flagged_annotation_file, target_features = c("put
   # (error using apply with no null rows, this maintains matrix structure)
   filtered_vec <- list(length(annot_data))
   for (i in 1:nrow(annot_data)){
-    if (selection(annot_data[i,], target_features, target_flag) == TRUE){
+    if (selection(annot_data[i,], target_features, target_flag)){
       filtered_vec[i] <- TRUE
     }else{
       filtered_vec[i] <- FALSE
     }
   }
-  filtered_selection <- annot_data[unlist(filtered_vec)==TRUE,]
-  selection_not_null <- filtered_selection[,lapply(filtered_selection, is.null)==FALSE]
+  filtered_selection <- annot_data[unlist(filtered_vec),]
+  selection_not_null <- filtered_selection[,!vapply(filtered_selection, is.null, logical(1))]
   df <- data.frame(matrix(unlist(selection_not_null), nrow=nrow(selection_not_null), byrow=F))
   ## Restore the original header.
   f <- readLines(flagged_annotation_file)
   header <- c()
   i <- 1
-  while (grepl("#",f[i])==TRUE) {
+  while (grepl("#", f[i], fixed = TRUE)) {
     header <- c(header,f[i])
     i <- i+1
   }
@@ -182,3 +182,4 @@ tpm_flag_filtering <- function(flagged_annotation_file, target_features = c("put
 }
 
 #commit1 completed
+#commit2 completed

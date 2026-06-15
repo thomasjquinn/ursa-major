@@ -57,18 +57,18 @@ find_strandedness <- function(strand_param){
 #'
 #' @importFrom stringr str_match
 #' @export
-make_saf <- function(ann_file, exclude=F){
+make_saf <- function(ann_file, exclude=FALSE){
   #function to create SAF file from gff from feature file editor
   gff <- read.delim(ann_file, header = FALSE, comment.char = "#")
   ## check that file is correct format (9 cols)
   stopifnot("annotation file format is invalid" = ncol(gff)==9)
   ## Select only the major genomic features: remove all child features (like CDS, mRNA etc.) and extra features
-  if (exclude==F){
-    major_f <- gff[grepl("Parent", gff[,9], ignore.case = TRUE)==FALSE &
+  if (!exclude){
+    major_f <- gff[!grepl("Parent", gff[,9], ignore.case = TRUE) &
                      gff[,3]!='chromosome' & gff[,3]!='biological_region' &
                      gff[,3]!='region' & gff[,3]!='sequence_feature',]
   }else{ # if you want to exclude rRNA and tRNA features)
-    major_f <- gff[grepl("Parent", gff[,9], ignore.case = TRUE)==FALSE &
+    major_f <- gff[!grepl("Parent", gff[,9], ignore.case = TRUE) &
                      gff[,3]!='chromosome' & gff[,3]!='biological_region' &
                      gff[,3]!='region' &
                      gff[,3]!='sequence_feature' &
@@ -97,8 +97,8 @@ make_saf <- function(ann_file, exclude=F){
 #' @param chromosome_alias_file A comma-delimited TXT file containing a character string with the chromosome names. This file has to have two columns: first with the chromosome name in the annotation file, second with the chromosome name in the BAM file.
 #' @param strandedness A string outlining the type of the sequencing library: unstranded, stranded, or reversely stranded.
 #' @param is_paired_end A boolean indicating if the reads are paired-end.
-#' @param excl_rna A boolean indicating if misc RNA features (rRNA, tRNA) are excluded from quantification. (Defaults=T)
-#' @param ... Optional parameters passed on to featureCounts()  Default: allowMultiOverlap = T, fraction = T
+#' @param excl_rna A boolean indicating if misc RNA features (rRNA, tRNA) are excluded from quantification. (Defaults=TRUE)
+#' @param ... Optional parameters passed on to featureCounts()  Default: allowMultiOverlap = TRUE, fraction = TRUE
 #'
 #' @return Count tables for each feature are written into separate files, as well as the result summary.
 #'
@@ -114,7 +114,7 @@ count_features <- function(bam_dir=".",
                            chromosome_alias_file,
                            strandedness,
                            is_paired_end,
-                           excl_rna = T,
+                           excl_rna = TRUE,
                            ...){
   ## function to call rsubread featureCounts
 
@@ -131,17 +131,14 @@ count_features <- function(bam_dir=".",
   ## if output directory exists, create filenames and path to output file
   stopifnot("Output directory doesn't exist" = dir.exists(output_dir))
   output_file  <- paste(output_dir, output_filename, sep = "/")
-  count_file_name <- paste(output_file, "_Counts.csv", sep = "")
-  summary_file_name <- paste(output_file, "_Count_summary.csv", sep="")
+  count_file_name <- paste0(output_file, "_Counts.csv")
+  summary_file_name <- paste0(output_file, "_Count_summary.csv")
 
   ## The strandedness set by the user is translated into the integer for strandSpecific argument of the featureCounts function.
   strand_specific <- find_strandedness(strandedness)
 
   ## Paired-end is FALSE by default unless specified by the user otherwise.
-  paired_end <- FALSE
-  if(is_paired_end==TRUE){
-    paired_end <- TRUE
-  }
+  paired_end <- isTRUE(is_paired_end)
 
   ## Extract BAM file names without extension.
   sample_names <- c(file_path_sans_ext(basename(bam_files)))
@@ -152,15 +149,16 @@ count_features <- function(bam_dir=".",
                       chrAliases = chromosome_alias_file,
                       strandSpecific = strand_specific,
                       isPairedEnd = paired_end,
-                      allowMultiOverlap = T,
-                      fraction = T,
+                      allowMultiOverlap = TRUE,
+                      fraction = TRUE,
                       ...)
   colnames(fc$counts) <- sample_names
   write.table(fc$counts, count_file_name, sep = "\t")
   colnames(fc$stat) <- c('Status',sample_names)
   write.table(fc$stat, summary_file_name, sep = "\t")
 
-  return("Done!")
+  invisible(NULL)
 }
 
 #commit1 completed
+#commit2 completed
