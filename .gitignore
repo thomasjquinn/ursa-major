@@ -1,0 +1,30 @@
+# R session data and history
+.Rhistory
+.Rapp.history
+.RData
+.RDataTmp
+.Ruserdata
+.Renviron
+
+# RStudio user files
+.Rproj.user/
+
+# R CMD build / check output
+/*.tar.gz
+/*.Rcheck/
+*-Ex.R
+
+# Script backups and scratch files
+*.bak
+*~
+*.swp
+*.tmp
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor settings
+.vscode/
+.idea/

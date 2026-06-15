@@ -1,0 +1,14 @@
+# .gitattributes
+# Line-ending and binary handling for the ursa-major repository.
+# Pinned here so behaviour is identical for every contributor, regardless of
+# each machine's local Git configuration (this overrides core.autocrlf).
+
+# Default: auto-detect text vs binary; store and check out all text as LF.
+* text=auto eol=lf
+
+# Be explicit about the text file types in this repository.
+*.R    text eol=lf
+*.md   text eol=lf
+
+# Snapshot objects are binary: never apply line-ending conversion.
+*.rds  binary
