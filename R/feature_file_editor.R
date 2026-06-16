@@ -385,3 +385,4 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
 #commit1 completed
 #commit2 completed
 #commit3 completed
+#commit4 completed
