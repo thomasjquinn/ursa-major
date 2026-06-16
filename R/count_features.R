@@ -94,7 +94,9 @@ make_saf <- function(ann_file, exclude=FALSE){
 #' @param largest_overlap A boolean; if TRUE, assigns each read to the feature with the largest number of overlapping bases. Maps to featureCounts largestOverlap. Combined with the package's `fraction = TRUE`, Rsubread >= 2.14.0 is recommended, since earlier versions silently miscount that combination. (Default: FALSE)
 #' @param frac_overlap_feature Minimum fraction of a feature that must be overlapped before a read is assigned to it. Maps to featureCounts fracOverlapFeature. (Default: 0)
 #' @param read_to_pos Reduce each read to a single base before counting: 5 for the 5' end, 3 for the 3' end, or NULL to count the whole read. Maps to featureCounts read2pos. (Default: NULL)
-#' @param ... Optional parameters passed on to featureCounts()  Default: allowMultiOverlap = TRUE, fraction = TRUE
+#' @param count_multi_mapping_reads A boolean; if FALSE, reads mapping to multiple locations are excluded from counts. Maps to featureCounts countMultiMappingReads. (Default: FALSE, reproducing 2019 behaviour)
+#' @param count_read_pairs A boolean; for paired-end data, if TRUE each fragment is counted once rather than each mate separately. Ignored for single-end data. Maps to featureCounts countReadPairs. Requires Rsubread >= 2.4.3. (Default: TRUE)
+#' @param ... Optional parameters passed on to featureCounts(). Note that allowMultiOverlap and fraction are set internally to TRUE and cannot be overridden via ...
 #'
 #' @return Count tables for each feature are written into separate files, as well as the result summary.
 #'
@@ -114,6 +116,8 @@ count_features <- function(bam_dir=".",
                            largest_overlap = FALSE,
                            frac_overlap_feature = 0,
                            read_to_pos = NULL,
+                           count_multi_mapping_reads = FALSE,
+                           count_read_pairs = TRUE,
                            ...){
   ## function to call rsubread featureCounts
 
@@ -148,6 +152,10 @@ count_features <- function(bam_dir=".",
                       chrAliases = chromosome_alias_file,
                       strandSpecific = strand_specific,
                       isPairedEnd = paired_end,
+                      # countReadPairs requires Rsubread >= 2.4.3 (present in the 2.4.3 reference manual, RELEASE_3_12, 30 March 2021);
+                      # forwarded unconditionally, with the matching DESCRIPTION Imports floor added at the documentation commit.
+                      countReadPairs = count_read_pairs,
+                      countMultiMappingReads = count_multi_mapping_reads,
                       allowMultiOverlap = TRUE,
                       fraction = TRUE,
                       largestOverlap = largest_overlap,
@@ -168,3 +176,4 @@ count_features <- function(bam_dir=".",
 #commit4 completed
 #commit5 completed
 #commit6 completed
+#commit7 completed

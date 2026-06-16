@@ -344,7 +344,7 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
     message("Extracted plus strand data from BAM files")
     maj_plus_features <- major_features(original_annotation_file, annot_file_directory = annot_file_dir, "+", original_sRNA_annotation)
     plus_sRNA <- sRNA_calc(maj_plus_features, "+", plus_strand_peaks)
-    plus_UTR <- UTR_calc(maj_plus_features, "+", plus_strand_peaks, min_sRNA_length)
+    plus_UTR <- UTR_calc(maj_plus_features, "+", plus_strand_peaks, min_UTR_length)
     plus_annot_dataframe <- strand_feature_editor("+", plus_sRNA, plus_UTR, maj_plus_features)
     message("Built plus strand annotation dataframe")
     ## Minus strand
@@ -402,3 +402,4 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
 #commit4 completed
 #commit5 completed
 #commit6 completed
+#commit7 completed
