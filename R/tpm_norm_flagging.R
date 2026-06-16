@@ -4,7 +4,6 @@
 #'
 #' @param count_table A CSV file containing feature counts for each sample.
 #' @param complete_ann A GFF3 annotation file or SAF dataframe
-#' @param feature_type A string indicating desired feature type(s) from annotation.
 #' @param is_gff A boolean indicating whether annotation is gff file, default=TRUE
 #' @param excl_rna A boolean indicating if misc RNA features (rRNA, tRNA) are excluded from normalisation. (Defaults=TRUE)
 #' @param output_file A string indicating the name of the output file.
@@ -15,7 +14,7 @@
 #' @importFrom utils read.delim write.table
 #'
 #' @export
-tpm_normalisation <- function(count_table, complete_ann, feature_type = c("putative_sRNA", "putative_UTR"), is_gff = TRUE, output_file = NA, excl_rna = TRUE) {
+tpm_normalisation <- function(count_table, complete_ann, is_gff = TRUE, output_file = NA, excl_rna = TRUE) {
   ## check output directory exists
   if (!is.na(output_file)) {
     out_dir <- dirname(output_file)
@@ -29,7 +28,7 @@ tpm_normalisation <- function(count_table, complete_ann, feature_type = c("putat
   }
   feature_names <- nsaf_df$GeneID
 
-  ## Load in the count table and filter for feature types
+  ## Load in the count table
   count_df <- read.delim(count_table)
 
   ## Calculate the length of the features, if they are in the right order.
@@ -51,7 +50,7 @@ tpm_normalisation <- function(count_table, complete_ann, feature_type = c("putat
 
   ## If the output file is set by the user, write the TPM dataframe into it.
   if (!is.na(output_file)) {
-    write.table(tpm_df, output_file, sep = "\t")
+    write.table(tpm_df, output_file, sep = "\t", quote = FALSE)
   }
   return(tpm_df)
 }
@@ -65,7 +64,7 @@ tpm_normalisation <- function(count_table, complete_ann, feature_type = c("putat
 #' @param complete_annotation A GFF3 annotation file.
 #' @param output_file A string indicating the name of the output file.
 #'
-#' @return A Gff3 file, where a target feature type has an expression flag added to its attribute column.
+#' @return The path to the output GFF3 file, returned invisibly. The written file is the input annotation with an expression flag added to the attribute column of each flagged feature.
 #'
 #'
 #' @importFrom utils read.delim write.table
@@ -105,7 +104,7 @@ tpm_flagging <- function(tpm_data, complete_annotation, output_file) {
                                flags[feature_names[matched]])
 
   write.table(new_annot, output_file, sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
-
+  invisible(output_file)
 }
 
 
@@ -151,3 +150,4 @@ tpm_flag_filtering <- function(flagged_annotation_file, target_features = c("put
 #commit3 completed
 #commit4 completed
 #commit5 completed
+#commit6 completed

@@ -9,15 +9,8 @@
 #'
 #' @export
 read_annotation_file <- function(annot_dir, annot_file){
-  #read in annotation file
-  annot_file_loc <- c()
-  if (annot_dir==".") {
-    annot_file_loc <- annot_file
-    stopifnot("Annotation file not found" = file.access(annot_file_loc, mode=0) == 0)
-  } else {
-    annot_file_loc <- paste(annot_dir, annot_file, sep = "/")
-    stopifnot("Annotation file not found" = file.access(annot_file_loc, mode=0) == 0)
-  }
+  annot_file_loc <- file.path(annot_dir, annot_file)
+  stopifnot("Annotation file not found" = file.exists(annot_file_loc))
   return(annot_file_loc)
 }
 
@@ -98,6 +91,9 @@ make_saf <- function(ann_file, exclude=FALSE){
 #' @param strandedness A string outlining the type of the sequencing library: unstranded, stranded, or reversely stranded.
 #' @param is_paired_end A boolean indicating if the reads are paired-end.
 #' @param excl_rna A boolean indicating if misc RNA features (rRNA, tRNA) are excluded from quantification. (Defaults=TRUE)
+#' @param largest_overlap A boolean; if TRUE, assigns each read to the feature with the largest number of overlapping bases. Maps to featureCounts largestOverlap. Combined with the package's `fraction = TRUE`, Rsubread >= 2.14.0 is recommended, since earlier versions silently miscount that combination. (Default: FALSE)
+#' @param frac_overlap_feature Minimum fraction of a feature that must be overlapped before a read is assigned to it. Maps to featureCounts fracOverlapFeature. (Default: 0)
+#' @param read_to_pos Reduce each read to a single base before counting: 5 for the 5' end, 3 for the 3' end, or NULL to count the whole read. Maps to featureCounts read2pos. (Default: NULL)
 #' @param ... Optional parameters passed on to featureCounts()  Default: allowMultiOverlap = TRUE, fraction = TRUE
 #'
 #' @return Count tables for each feature are written into separate files, as well as the result summary.
@@ -115,6 +111,9 @@ count_features <- function(bam_dir=".",
                            strandedness,
                            is_paired_end,
                            excl_rna = TRUE,
+                           largest_overlap = FALSE,
+                           frac_overlap_feature = 0,
+                           read_to_pos = NULL,
                            ...){
   ## function to call rsubread featureCounts
 
@@ -151,11 +150,14 @@ count_features <- function(bam_dir=".",
                       isPairedEnd = paired_end,
                       allowMultiOverlap = TRUE,
                       fraction = TRUE,
+                      largestOverlap = largest_overlap,
+                      fracOverlapFeature = frac_overlap_feature,
+                      read2pos = read_to_pos,
                       ...)
   colnames(fc$counts) <- sample_names
-  write.table(fc$counts, count_file_name, sep = "\t")
+  write.table(fc$counts, count_file_name, sep = "\t", quote = FALSE)
   colnames(fc$stat) <- c('Status',sample_names)
-  write.table(fc$stat, summary_file_name, sep = "\t")
+  write.table(fc$stat, summary_file_name, sep = "\t", quote = FALSE)
 
   invisible(NULL)
 }
@@ -165,3 +167,4 @@ count_features <- function(bam_dir=".",
 #commit3 completed
 #commit4 completed
 #commit5 completed
+#commit6 completed
