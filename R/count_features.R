@@ -177,3 +177,4 @@ count_features <- function(bam_dir=".",
 #commit5 completed
 #commit6 completed
 #commit7 completed
+#commit8 completed

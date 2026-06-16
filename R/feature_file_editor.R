@@ -10,6 +10,35 @@
 #' @param peak_width An integer indicating the minimum peak width.
 #' @param paired_end_data A boolean indicating if the reads are paired-end.
 #' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely stranded.
+#' @param scanbamparam An optional \code{Rsamtools::ScanBamParam} object giving
+#'   full control of the BAM read filter. When \code{NULL} (the default) an
+#'   internal filter is built from \code{mapqFilter} plus alignment-flag
+#'   exclusions: unmapped, QC-failing, secondary and supplementary alignments
+#'   are dropped, and for paired-end data the read must additionally be properly
+#'   paired with a mapped mate. A supplied \code{scanbamparam} takes precedence
+#'   and \code{mapqFilter} is then ignored.
+#' @param mapqFilter Integer. Minimum mapping quality (MAPQ) a read must have to
+#'   be retained during coverage construction, used only when
+#'   \code{scanbamparam = NULL}. Default 10, which keeps uniquely-mapped reads
+#'   on the common bacterial aligners while discarding the ambiguous and
+#'   multi-mapping reads that cluster at MAPQ 0 to 3. MAPQ is aligner-specific,
+#'   so do NOT set \code{mapqFilter} above the MAPQ your aligner assigns a
+#'   uniquely-mapped read, or all reads are discarded and coverage is empty.
+#'   Maximum recommended values by aligner: BWA-MEM 60, minimap2 60, Rsubread
+#'   align/subjunc 40, BWA aln (backtrack) 37, Bowtie2 42 (but see note). Note:
+#'   Bowtie2 uses a non-monotonic MAPQ in which some uniquely-mapped reads that
+#'   carry mismatches score only 3 or 8, below the default of 10, so Bowtie2
+#'   users should set \code{mapqFilter = 1}. Set \code{mapqFilter = NA} to
+#'   disable mapping-quality filtering while keeping the flag exclusions. A
+#'   read-quality filter that retains no reads triggers a warning.
+#' @param coverage_model Character, one of "fragment" or "footprint", controlling
+#'   how paired-end reads contribute to coverage; applies to paired-end data only
+#'   and is ignored for single-end. "fragment" (the default) counts each read
+#'   pair as a single fragment spanning its leftmost to rightmost aligned base,
+#'   so the unsequenced insert between the mates is treated as covered.
+#'   "footprint" counts only the aligned blocks of the two mates, leaving the gap
+#'   between them uncovered. Fragment coverage is smoother and fuller; footprint
+#'   coverage is more conservative and reflects only sequenced bases.
 #' 
 #' @return A named list with two IRanges objects, `plus` and `minus`, holding the
 #'   unified peak coordinates for each strand.
@@ -20,7 +49,8 @@
 #' @importFrom utils capture.output read.csv read.delim write.table
 #'
 #' @export
-peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_cutoff, high_coverage_cutoff, peak_width, paired_end_data = FALSE, strandedness = "unstranded") {
+peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_cutoff, high_coverage_cutoff, peak_width, paired_end_data = FALSE, strandedness = "unstranded", scanbamparam = NULL, mapqFilter = 10, coverage_model = c("fragment", "footprint")) {
+  coverage_model <- match.arg(coverage_model)
   ## Find all BAM files in the directory.
   if (bam_txt_list != ""){
     bam_files <- readLines(bam_txt_list)
@@ -51,14 +81,53 @@ peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_
 
   plus_union  <- IRanges()
   minus_union <- IRanges()
+  empty_bams  <- character(0)
+  ## Build the default read-quality filter when none is supplied.
+  ## mapqFilter (default 10) sets the minimum MAPQ and is used only on this
+  ## default path; a supplied scanbamparam takes precedence and mapqFilter is
+  ## ignored. Default 10 keeps uniquely-mapped reads on the common bacterial
+  ## aligners while dropping the ambiguous and multi-mapping reads that cluster
+  ## at MAPQ 0 to 3. MAPQ is aligner-specific: never set it above the MAPQ your
+  ## aligner gives a uniquely-mapped read, or coverage empties. Unique-read
+  ## ceilings: BWA-MEM 60, minimap2 60, Rsubread 40, bwa aln 37, bowtie2 42.
+  ## Bowtie2 is the exception: its non-monotonic MAPQ scores some unique reads
+  ## carrying mismatches 3 or 8 (below 10), so Bowtie2 users should pass
+  ## mapqFilter = 1. Set mapqFilter = NA to disable MAPQ filtering while keeping
+  ## the flag exclusions; for total control pass a full ScanBamParam.
+  if (is.null(scanbamparam)) {
+    if (paired_end_data) {
+      scanbamflag <- scanBamFlag(isUnmappedQuery = FALSE,
+                                 isPaired = TRUE,
+                                 isProperPair = TRUE,
+                                 isNotPassingQualityControls = FALSE,
+                                 hasUnmappedMate = FALSE,
+                                 isSecondaryAlignment = FALSE,
+                                 isSupplementaryAlignment = FALSE)
+    } else {
+      scanbamflag <- scanBamFlag(isUnmappedQuery = FALSE,
+                                 isNotPassingQualityControls = FALSE,
+                                 isSecondaryAlignment = FALSE,
+                                 isSupplementaryAlignment = FALSE)
+    }
+    scanbamparam <- ScanBamParam(flag = scanbamflag, mapqFilter = mapqFilter)
+  }
   ## Read each BAM once, split by strand, and accumulate both peak unions.
   for (f in bam_files) {
     if (paired_end_data) {
       strand_mode <- if (strandedness == "reversely_stranded") 2 else 1
-      file_alignment <- granges(readGAlignmentPairs(f, strandMode = strand_mode))
+      read_pairs <- readGAlignmentPairs(f, strandMode = strand_mode, param = scanbamparam)
+      ## coverage_model (paired-end only): "footprint" counts only the aligned
+      ## blocks of each mate, leaving the gap between mates uncovered; "fragment"
+      ## (default) counts the whole pair from leftmost to rightmost base.
+      if (coverage_model == "footprint") {
+        file_alignment <- unlist(grglist(read_pairs))
+      } else {
+        file_alignment <- granges(read_pairs)
+      }
     } else {
-      file_alignment <- readGAlignments(f)
+      file_alignment <- readGAlignments(f, param = scanbamparam)
     }
+    if (length(file_alignment) == 0L) empty_bams <- c(empty_bams, f)
     reads_plus  <- file_alignment[strand(file_alignment) == "+"]
     reads_minus <- file_alignment[strand(file_alignment) == "-"]
     ## Single-end reversely-stranded data interprets the read strand in reverse.
@@ -69,8 +138,16 @@ peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_
       plus_reads  <- reads_plus
       minus_reads <- reads_minus
     }
-    plus_union  <- union(plus_union,  compute_strand_peaks(plus_reads,  f))
-    minus_union <- union(minus_union, compute_strand_peaks(minus_reads, f))
+    plus_union  <- IRanges::union(plus_union,  compute_strand_peaks(plus_reads,  f))
+    minus_union <- IRanges::union(minus_union, compute_strand_peaks(minus_reads, f))
+  }
+  ## Warn once if an active mapqFilter left any BAM with no reads.
+  if (length(empty_bams) > 0L && !is.null(scanbamparam) && !is.na(bamMapqFilter(scanbamparam))) {
+    warning(paste0(length(empty_bams), " BAM file(s) yielded no reads after filtering with ",
+                   "mapqFilter = ", bamMapqFilter(scanbamparam), " (e.g. ", basename(empty_bams[1]),
+                   "). This usually means the threshold exceeds the aligner's maximum MAPQ ",
+                   "(bwa aln ~37, bowtie2 ~42); lower mapqFilter or set it to NA."),
+            call. = FALSE, immediate. = TRUE)
   }
   return(list(plus = plus_union, minus = minus_union))
 }
@@ -330,16 +407,45 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
 #' @param min_UTR_length An integer indicating the minimum UTR length.
 #' @param paired_end_data A boolean indicating if the reads are paired-end.
 #' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely stranded.
+#' @param scanbamparam An optional \code{Rsamtools::ScanBamParam} object giving
+#'   full control of the BAM read filter. When \code{NULL} (the default) an
+#'   internal filter is built from \code{mapqFilter} plus alignment-flag
+#'   exclusions: unmapped, QC-failing, secondary and supplementary alignments
+#'   are dropped, and for paired-end data the read must additionally be properly
+#'   paired with a mapped mate. A supplied \code{scanbamparam} takes precedence
+#'   and \code{mapqFilter} is then ignored.
+#' @param mapqFilter Integer. Minimum mapping quality (MAPQ) a read must have to
+#'   be retained during coverage construction, used only when
+#'   \code{scanbamparam = NULL}. Default 10, which keeps uniquely-mapped reads
+#'   on the common bacterial aligners while discarding the ambiguous and
+#'   multi-mapping reads that cluster at MAPQ 0 to 3. MAPQ is aligner-specific,
+#'   so do NOT set \code{mapqFilter} above the MAPQ your aligner assigns a
+#'   uniquely-mapped read, or all reads are discarded and coverage is empty.
+#'   Maximum recommended values by aligner: BWA-MEM 60, minimap2 60, Rsubread
+#'   align/subjunc 40, BWA aln (backtrack) 37, Bowtie2 42 (but see note). Note:
+#'   Bowtie2 uses a non-monotonic MAPQ in which some uniquely-mapped reads that
+#'   carry mismatches score only 3 or 8, below the default of 10, so Bowtie2
+#'   users should set \code{mapqFilter = 1}. Set \code{mapqFilter = NA} to
+#'   disable mapping-quality filtering while keeping the flag exclusions. A
+#'   read-quality filter that retains no reads triggers a warning.
+#' @param coverage_model Character, one of "fragment" or "footprint", controlling
+#'   how paired-end reads contribute to coverage; applies to paired-end data only
+#'   and is ignored for single-end. "fragment" (the default) counts each read
+#'   pair as a single fragment spanning its leftmost to rightmost aligned base,
+#'   so the unsequenced insert between the mates is treated as covered.
+#'   "footprint" counts only the aligned blocks of the two mates, leaving the gap
+#'   between them uncovered. Fragment coverage is smoother and fuller; footprint
+#'   coverage is more conservative and reflects only sequenced bases.
 #' 
 #' @return Outputs a new GFF3 file populated with predicted sRNAs and UTRs.
 #'
 #' 
 #' @export
-feature_file_editor <- function(bam_directory = ".", bam_list = "", original_annotation_file, annot_file_dir = ".", output_file, original_sRNA_annotation, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, min_UTR_length, paired_end_data = FALSE, strandedness  = "stranded") {
+feature_file_editor <- function(bam_directory = ".", bam_list = "", original_annotation_file, annot_file_dir = ".", output_file, original_sRNA_annotation, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, min_UTR_length, paired_end_data = FALSE, strandedness  = "stranded", scanbamparam = NULL, mapqFilter = 10, coverage_model = c("fragment", "footprint")) {
   test <- list.files(path = bam_directory, pattern = "\\.BAM$", full.names = TRUE, ignore.case = TRUE)
   if (length(test) > 0){
     ## Plus strand
-    peak_sets <- peak_union_calc(bam_location = bam_directory, bam_txt_list = bam_list, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, paired_end_data, strandedness)
+    peak_sets <- peak_union_calc(bam_location = bam_directory, bam_txt_list = bam_list, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, paired_end_data, strandedness, scanbamparam = scanbamparam, mapqFilter = mapqFilter, coverage_model = coverage_model)
     plus_strand_peaks  <- peak_sets$plus
     message("Extracted plus strand data from BAM files")
     maj_plus_features <- major_features(original_annotation_file, annot_file_directory = annot_file_dir, "+", original_sRNA_annotation)
@@ -403,3 +509,4 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
 #commit5 completed
 #commit6 completed
 #commit7 completed
+#commit8 completed
