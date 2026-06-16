@@ -15,6 +15,69 @@ read_annotation_file <- function(annot_dir, annot_file){
 }
 
 
+#' Load a GFF annotation into a reusable cache
+#'
+#' Reads a GFF3 annotation file once and returns a list holding both the
+#' raw lines and the parsed dataframe, so downstream baerhunter functions
+#' can reuse a single parse instead of re-reading the file from disk. The
+#' path is resolved the same way the prediction and counting stages resolve
+#' annotation paths: a complete path is used as given, and a directory is
+#' prepended only when \code{annot_file_directory} is not ".". The resolved
+#' path is checked for existence before it is read.
+#'
+#' @param annotation_file A GFF3 genome annotation file, given either as a
+#'   complete path or as a filename to be resolved against
+#'   \code{annot_file_directory}.
+#' @param annot_file_directory The directory containing the annotation file
+#'   (default "."). When ".", \code{annotation_file} is used as given.
+#'
+#' @return A list with three named slots: \code{path} (the resolved file
+#'   path), \code{raw_lines} (the annotation as a character vector, read by
+#'   \code{readLines}) and \code{parsed} (the tab-delimited dataframe, read
+#'   by \code{read.delim}).
+#'
+#' @importFrom utils read.delim
+#' @export
+load_gff_cache <- function(annotation_file, annot_file_directory = ".") {
+  annot_file_loc <- if (annot_file_directory == ".") {
+    annotation_file
+  } else {
+    file.path(annot_file_directory, annotation_file)
+  }
+  stopifnot("Annotation file not found" = file.exists(annot_file_loc))
+  list(
+    path      = annot_file_loc,
+    raw_lines = readLines(annot_file_loc),
+    parsed    = read.delim(annot_file_loc, header = FALSE,
+                           comment.char = "#")
+  )
+}
+
+
+#' Resolve a GFF argument to a cache
+#'
+#' Internal dispatch helper. Returns its argument unchanged if it is already
+#' a GFF cache (a list carrying the \code{path}, \code{raw_lines} and
+#' \code{parsed} slots); otherwise treats it as a file path and builds a
+#' cache via \code{load_gff_cache}. This lets every public function that
+#' accepts a GFF path also accept a pre-built cache without a signature
+#' change.
+#'
+#' @param x Either a GFF cache or a path to a GFF3 annotation file.
+#' @param annot_file_directory The directory containing the annotation file (default ".").
+#'
+#' @return A GFF cache list (see \code{load_gff_cache}).
+#'
+#' @keywords internal
+.resolve_gff_cache <- function(x, annot_file_directory = ".") {
+  if (is.list(x) &&
+      all(c("path", "raw_lines", "parsed") %in% names(x))) {
+    return(x)
+  }
+  load_gff_cache(x, annot_file_directory)
+}
+
+
 #' find_strandedness function
 #'
 #' This function translates the user-inputted strandedness parameter to the required integer input for strandSpecific arg of featureCounts.
@@ -51,8 +114,8 @@ find_strandedness <- function(strand_param){
 #' @importFrom stringr str_match
 #' @export
 make_saf <- function(ann_file, exclude=FALSE){
-  #function to create SAF file from gff from feature file editor
-  gff <- read.delim(ann_file, header = FALSE, comment.char = "#")
+  gff_cache <- .resolve_gff_cache(ann_file)
+  gff <- gff_cache$parsed
   ## check that file is correct format (9 cols)
   stopifnot("annotation file format is invalid" = ncol(gff)==9)
   ## Select only the major genomic features: remove all child features (like CDS, mRNA etc.) and extra features
@@ -121,15 +184,15 @@ count_features <- function(bam_dir=".",
                            ...){
   ## function to call rsubread featureCounts
 
-  ##read in annotation file (in gff3 form)
-  annot_file_loc <- read_annotation_file(annotation_dir, annotation_file)
+  ## Load the annotation once (path resolved, existence checked, parsed and raw lines cached).
+  gff_cache <- load_gff_cache(annotation_file, annotation_dir)
 
   ## Compile a list of BAM files present in the bam directory
   bam_files <- list.files(path = bam_dir, pattern = "\\.BAM$", full.names = TRUE, ignore.case = TRUE)
   stopifnot("Empty bam directory" = length(bam_files) > 0)
 
-  ## Convert gff to SAF dataframe
-  nsaf_df <- make_saf(ann_file=annot_file_loc, exclude=excl_rna)
+  ## Convert to SAF from the cache
+  nsaf_df <- make_saf(ann_file = gff_cache, exclude = excl_rna)
 
   ## if output directory exists, create filenames and path to output file
   stopifnot("Output directory doesn't exist" = dir.exists(output_dir))
@@ -178,3 +241,4 @@ count_features <- function(bam_dir=".",
 #commit6 completed
 #commit7 completed
 #commit8 completed
+#commit9 completed

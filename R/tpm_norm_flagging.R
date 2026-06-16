@@ -91,7 +91,8 @@ tpm_flagging <- function(tpm_data, complete_annotation, output_file) {
   }
   flags <- apply(norm_data, 1, function(x) tpm_analyser(as.vector(x)))
   flag_names <- names(flags)
-  ann_file <- readLines(complete_annotation)
+  gff_cache <- .resolve_gff_cache(complete_annotation)
+  ann_file  <- gff_cache$raw_lines
   ## Add the flag to the corresponding feature's attribute column.
   feature_names <- sub(".*?ID=(.*?);.*", "\\1", ann_file)
   matched <- feature_names %in% flag_names
@@ -124,15 +125,16 @@ tpm_flagging <- function(tpm_data, complete_annotation, output_file) {
 #' @export
 tpm_flag_filtering <- function(flagged_annotation_file, target_features = c("putative_sRNA", "putative_UTR"), target_flag, output_file) {
 
-  ##load in annotation data.
-  annot_data <- read.delim(flagged_annotation_file, header = FALSE, comment.char = "#")
+  ## Load the flagged GFF once.
+  gff_cache  <- .resolve_gff_cache(flagged_annotation_file)
+  annot_data <- gff_cache$parsed
 
   is_target  <- annot_data[, 3] %in% target_features
   flag_match <- grepl(target_flag, annot_data[, 9], fixed = TRUE)
   keep       <- !is_target | flag_match
   filtered_selection <- annot_data[keep, ]
-  ## Restore the original header.
-  f <- readLines(flagged_annotation_file)
+  ## Restore the original header from the cache.
+  f <- gff_cache$raw_lines
   header <- c()
   i <- 1
   while (grepl("#", f[i], fixed = TRUE)) {
@@ -153,3 +155,4 @@ tpm_flag_filtering <- function(flagged_annotation_file, target_features = c("put
 #commit6 completed
 #commit7 completed
 #commit8 completed
+#commit9 completed

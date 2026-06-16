@@ -31,14 +31,14 @@
 #'   users should set \code{mapqFilter = 1}. Set \code{mapqFilter = NA} to
 #'   disable mapping-quality filtering while keeping the flag exclusions. A
 #'   read-quality filter that retains no reads triggers a warning.
-#' @param coverage_model Character, one of "fragment" or "footprint", controlling
-#'   how paired-end reads contribute to coverage; applies to paired-end data only
-#'   and is ignored for single-end. "fragment" (the default) counts each read
-#'   pair as a single fragment spanning its leftmost to rightmost aligned base,
-#'   so the unsequenced insert between the mates is treated as covered.
-#'   "footprint" counts only the aligned blocks of the two mates, leaving the gap
-#'   between them uncovered. Fragment coverage is smoother and fuller; footprint
-#'   coverage is more conservative and reflects only sequenced bases.
+#' @param coverage_model Character, one of "fragment" or "footprint", setting how
+#'   paired-end reads contribute to coverage. It applies only to paired-end data
+#'   and is ignored for single-end. "fragment" (the default) treats each read
+#'   pair as one span from its leftmost to rightmost aligned base, so the
+#'   unsequenced insert between the mates is counted as covered. "footprint"
+#'   instead counts only the aligned blocks of the two mates, so the insert
+#'   between them is left uncovered and the coverage reflects only the bases
+#'   that were actually sequenced.
 #' 
 #' @return A named list with two IRanges objects, `plus` and `minus`, holding the
 #'   unified peak coordinates for each strand.
@@ -116,9 +116,9 @@ peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_
     if (paired_end_data) {
       strand_mode <- if (strandedness == "reversely_stranded") 2 else 1
       read_pairs <- readGAlignmentPairs(f, strandMode = strand_mode, param = scanbamparam)
-      ## coverage_model (paired-end only): "footprint" counts only the aligned
-      ## blocks of each mate, leaving the gap between mates uncovered; "fragment"
-      ## (default) counts the whole pair from leftmost to rightmost base.
+      ## coverage_model (paired-end only): "fragment" (default) counts the whole
+      ## pair from leftmost to rightmost base; "footprint" counts only the aligned
+      ## blocks of each mate, leaving the gap between mates uncovered.
       if (coverage_model == "footprint") {
         file_alignment <- unlist(grglist(read_pairs))
       } else {
@@ -188,14 +188,8 @@ peak_analysis <- function(View_line, high_cutoff, min_sRNA_length) {
 #' @importFrom utils read.delim
 #' @export
 major_features <- function(annotation_file, annot_file_directory = ".", target_strand, original_sRNA_annotation) {
-  annot_file_loc <- c()
-  if (annot_file_directory==".") {
-    annot_file_loc <- annotation_file
-  } else {
-    annot_file_loc <- paste(annot_file_directory, annotation_file, sep = "/")
-  }
-  
-  gff <- read.delim(annot_file_loc, header = FALSE, comment.char = "#")
+  gff_cache <- .resolve_gff_cache(annotation_file, annot_file_directory)
+  gff <- gff_cache$parsed
   ## Pre-annotated sRNAs always have a defined biotype, which can be found in the attribute column.
   ## The following code creates a regex that will recognise pre-annotated sRNAs
   ori_sRNA_biotype <- c()
@@ -428,14 +422,14 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
 #'   users should set \code{mapqFilter = 1}. Set \code{mapqFilter = NA} to
 #'   disable mapping-quality filtering while keeping the flag exclusions. A
 #'   read-quality filter that retains no reads triggers a warning.
-#' @param coverage_model Character, one of "fragment" or "footprint", controlling
-#'   how paired-end reads contribute to coverage; applies to paired-end data only
-#'   and is ignored for single-end. "fragment" (the default) counts each read
-#'   pair as a single fragment spanning its leftmost to rightmost aligned base,
-#'   so the unsequenced insert between the mates is treated as covered.
-#'   "footprint" counts only the aligned blocks of the two mates, leaving the gap
-#'   between them uncovered. Fragment coverage is smoother and fuller; footprint
-#'   coverage is more conservative and reflects only sequenced bases.
+#' @param coverage_model Character, one of "fragment" or "footprint", setting how
+#'   paired-end reads contribute to coverage. It applies only to paired-end data
+#'   and is ignored for single-end. "fragment" (the default) treats each read
+#'   pair as one span from its leftmost to rightmost aligned base, so the
+#'   unsequenced insert between the mates is counted as covered. "footprint"
+#'   instead counts only the aligned blocks of the two mates, so the insert
+#'   between them is left uncovered and the coverage reflects only the bases
+#'   that were actually sequenced.
 #' 
 #' @return Outputs a new GFF3 file populated with predicted sRNAs and UTRs.
 #'
@@ -444,11 +438,14 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
 feature_file_editor <- function(bam_directory = ".", bam_list = "", original_annotation_file, annot_file_dir = ".", output_file, original_sRNA_annotation, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, min_UTR_length, paired_end_data = FALSE, strandedness  = "stranded", scanbamparam = NULL, mapqFilter = 10, coverage_model = c("fragment", "footprint")) {
   test <- list.files(path = bam_directory, pattern = "\\.BAM$", full.names = TRUE, ignore.case = TRUE)
   if (length(test) > 0){
+    ## Load the original GFF once for the whole wrapper.
+    gff_cache <- load_gff_cache(original_annotation_file, annot_file_dir)
+
     ## Plus strand
     peak_sets <- peak_union_calc(bam_location = bam_directory, bam_txt_list = bam_list, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, paired_end_data, strandedness, scanbamparam = scanbamparam, mapqFilter = mapqFilter, coverage_model = coverage_model)
     plus_strand_peaks  <- peak_sets$plus
     message("Extracted plus strand data from BAM files")
-    maj_plus_features <- major_features(original_annotation_file, annot_file_directory = annot_file_dir, "+", original_sRNA_annotation)
+    maj_plus_features <- major_features(gff_cache, annot_file_directory = annot_file_dir, "+", original_sRNA_annotation)
     plus_sRNA <- sRNA_calc(maj_plus_features, "+", plus_strand_peaks)
     plus_UTR <- UTR_calc(maj_plus_features, "+", plus_strand_peaks, min_UTR_length)
     plus_annot_dataframe <- strand_feature_editor("+", plus_sRNA, plus_UTR, maj_plus_features)
@@ -456,30 +453,22 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
     ## Minus strand
     minus_strand_peaks <- peak_sets$minus
     message("Extracted minus strand data from BAM files")
-    maj_minus_features <- major_features(original_annotation_file, annot_file_directory = annot_file_dir, "-", original_sRNA_annotation)
+    maj_minus_features <- major_features(gff_cache, annot_file_directory = annot_file_dir, "-", original_sRNA_annotation)
     minus_sRNA <- sRNA_calc(maj_minus_features, "-", minus_strand_peaks)
     minus_UTR <- UTR_calc(maj_minus_features, "-", minus_strand_peaks, min_UTR_length)
     minus_annot_dataframe <- strand_feature_editor("-", minus_sRNA, minus_UTR, maj_minus_features)
     message("Built minus strand annotation dataframe")
   
     ## Creating the final annotation dataframe by combining both strand dataframe and adding missing information like child features from the original GFF3 file.
-    annot_file_loc <- c()
-    if (annot_file_dir==".") {
-      annot_file_loc <- original_annotation_file
-    } else {
-      annot_file_loc <- paste(annot_file_dir, original_annotation_file, sep = "/")
-    }
-  
-    gff <- read.delim(annot_file_loc, header = FALSE, comment.char = "#")
-    annotation_dataframe <- rbind(gff, plus_annot_dataframe, minus_annot_dataframe)
+    annotation_dataframe <- rbind(gff_cache$parsed, plus_annot_dataframe, minus_annot_dataframe)
     ## Remove all teh repeating information.
     annotation_dataframe <- unique(annotation_dataframe)
     ## Order the dataframe by feature start coordinates.
     annotation_dataframe <- annotation_dataframe[order(annotation_dataframe[,4]),]
     message("Prepared complete annotation dataframe")
   
-    ## Restore the original header.
-    f <- readLines(annot_file_loc)
+    ## Restore the original header from the cache.
+    f <- gff_cache$raw_lines
     header <- c()
     i <- 1
     while (grepl("#", f[i], fixed = TRUE)) {
@@ -510,3 +499,4 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
 #commit6 completed
 #commit7 completed
 #commit8 completed
+#commit9 completed
