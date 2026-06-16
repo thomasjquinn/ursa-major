@@ -26,7 +26,7 @@ peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_
     bam_files <- readLines(bam_txt_list)
     bam_files <- lapply(bam_files, function(x) paste(bam_location, x, sep = "/"))
   } else {
-    bam_files <- list.files(path = bam_location, pattern = ".BAM$", full.names = TRUE, ignore.case = TRUE)
+    bam_files <- list.files(path = bam_location, pattern = "\\.BAM$", full.names = TRUE, ignore.case = TRUE)
   }
 
   ## Helper: selected peak IRanges for one strand's reads.
@@ -235,6 +235,16 @@ UTR_calc <- function(major_strand_features, target_strand, union_peak_ranges, mi
 #' 
 #' @export
 strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, major_strand_features) {
+  ## Collect GFF attributes whose ID could not be parsed, to report once after the loop.
+  unparsed_attrs <- character(0)
+  ## Parse a capture group from a GFF ID attribute, recording the attribute on no-match.
+  parse_id <- function(attr, pattern) {
+    parsed <- sub(pattern, "\\1", attr)
+    if (parsed == attr) {
+      unparsed_attrs <<- c(unparsed_attrs, attr)
+    }
+    parsed
+  }
   
   ## Join the sRNA and UTR ranges together.
   sRNA_UTR <- c(sRNA_IRanges, UTR_IRanges)
@@ -260,20 +270,20 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
   cmp_strand <- cmp_strand[order(cmp_strand[,4]),]
   
   ## Set the previous feature name to be the ID of the last feature in the chromosome, accounting for the fact that bacterial genomes are circular.
-  previous_feature_name <- sub("ID=.*?:(.*?);.*", "\\1", cmp_strand[nrow(cmp_strand),9])
+  previous_feature_name <- parse_id(cmp_strand[nrow(cmp_strand),9], "ID=.*?:(.*?);.*")
   
   for (i in 1:nrow(cmp_strand)) {
     ## Determine feature type from the attribute column if the third column is empty.
-    feature_name <- sub("ID=.*?:(.*?);.*", "\\1", cmp_strand[i,9])
+    feature_name <- parse_id(cmp_strand[i,9], "ID=.*?:(.*?);.*")
     if (cmp_strand[i,3]==".") {
-      feature_type <- sub("ID=(.*?):.*?;.*", "\\1", cmp_strand[i,9])
+      feature_type <- parse_id(cmp_strand[i,9], "ID=(.*?):.*?;.*")
       cmp_strand[i,3] <- feature_type
       ## Find the name of the next feature in the annotation.
       next_feature_name <- c()
       if (i+1 <= nrow(cmp_strand)) {
-        next_feature_name <- sub("ID=.*?:(.*?);.*", "\\1", cmp_strand[i+1,9])
+        next_feature_name <- parse_id(cmp_strand[i+1,9], "ID=.*?:(.*?);.*")
       } else {
-        next_feature_name <- sub("ID=.*?:(.*?);.*", "\\1", cmp_strand[1,9])
+        next_feature_name <- parse_id(cmp_strand[1,9], "ID=.*?:(.*?);.*")
       }
       
       ## Build feature attribute column information for sRNAs and UTRs, including upstream and downstream features (with reagards to the strand).
@@ -292,6 +302,14 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
     previous_feature_name <- feature_name
   }
   
+  ## Report unparsable feature IDs once, as a single deduplicated summary.
+  if (length(unparsed_attrs) > 0L) {
+    n_failed <- length(unique(unparsed_attrs))
+    warning(paste0(n_failed, " of ", nrow(cmp_strand),
+                   " feature IDs could not be parsed from the GFF attribute column (e.g. ",
+                   unparsed_attrs[1], "); IDs should have the form ID=type:name;."),
+            call. = FALSE, immediate. = TRUE)
+  }
   return(cmp_strand)
   
 }
@@ -322,7 +340,7 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
 #' 
 #' @export
 feature_file_editor <- function(bam_directory = ".", bam_list = "", original_annotation_file, annot_file_dir = ".", output_file, original_sRNA_annotation, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, min_UTR_length, paired_end_data = FALSE, strandedness  = "stranded") {
-  test <- list.files(path = bam_directory, pattern = ".BAM$", full.names = TRUE, ignore.case = TRUE)
+  test <- list.files(path = bam_directory, pattern = "\\.BAM$", full.names = TRUE, ignore.case = TRUE)
   if (length(test) > 0){
     ## Plus strand
     peak_sets <- peak_union_calc(bam_location = bam_directory, bam_txt_list = bam_list, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, paired_end_data, strandedness)
@@ -386,3 +404,4 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
 #commit2 completed
 #commit3 completed
 #commit4 completed
+#commit5 completed

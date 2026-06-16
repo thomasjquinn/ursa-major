@@ -94,16 +94,15 @@ tpm_flagging <- function(tpm_data, complete_annotation, output_file) {
   flag_names <- names(flags)
   ann_file <- readLines(complete_annotation)
   ## Add the flag to the corresponding feature's attribute column.
-  new_annot <- character(length(ann_file))
-  for (i in seq_along(ann_file)) {
-    feature_name <- sub(".*?ID=(.*?:.*?);.*", "\\1", ann_file[i])
-
-    if (feature_name %in% flag_names) {
-      new_annot[i] <- paste0(ann_file[i], ";expression_flag=", flags[feature_name])
-    } else {
-      new_annot[i] <- ann_file[i]
-    }
+  feature_names <- sub(".*?ID=(.*?);.*", "\\1", ann_file)
+  matched <- feature_names %in% flag_names
+  if (!any(matched)) {
+    warning("No annotation feature IDs matched the TPM table; check that the GFF ID format is consistent with the count table.",
+            call. = FALSE, immediate. = TRUE)
   }
+  new_annot <- ann_file
+  new_annot[matched] <- paste0(ann_file[matched], ";expression_flag=",
+                               flags[feature_names[matched]])
 
   write.table(new_annot, output_file, sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
@@ -151,3 +150,4 @@ tpm_flag_filtering <- function(flagged_annotation_file, target_features = c("put
 #commit2 completed
 #commit3 completed
 #commit4 completed
+#commit5 completed

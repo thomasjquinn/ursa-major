@@ -122,7 +122,7 @@ count_features <- function(bam_dir=".",
   annot_file_loc <- read_annotation_file(annotation_dir, annotation_file)
 
   ## Compile a list of BAM files present in the bam directory
-  bam_files <- list.files(path = bam_dir, pattern = ".BAM$", full.names = TRUE, ignore.case = TRUE)
+  bam_files <- list.files(path = bam_dir, pattern = "\\.BAM$", full.names = TRUE, ignore.case = TRUE)
   stopifnot("Empty bam directory" = length(bam_files) > 0)
 
   ## Convert gff to SAF dataframe
@@ -164,3 +164,4 @@ count_features <- function(bam_dir=".",
 #commit2 completed
 #commit3 completed
 #commit4 completed
+#commit5 completed
