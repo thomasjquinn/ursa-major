@@ -9,7 +9,7 @@
 #' @param high_coverage_cutoff An integer indicating the high coverage threshold value.
 #' @param peak_width An integer indicating the minimum peak width.
 #' @param paired_end_data A boolean indicating if the reads are paired-end.
-#' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely stranded.
+#' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely stranded. Defaults to "stranded"; "unstranded" is rejected with an error.
 #' @param scanbamparam An optional \code{Rsamtools::ScanBamParam} object giving
 #'   full control of the BAM read filter. When \code{NULL} (the default) an
 #'   internal filter is built from \code{mapqFilter} plus alignment-flag
@@ -49,8 +49,17 @@
 #' @importFrom utils capture.output read.csv read.delim write.table
 #'
 #' @export
-peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_cutoff, high_coverage_cutoff, peak_width, paired_end_data = FALSE, strandedness = "unstranded", scanbamparam = NULL, mapqFilter = 10, coverage_model = c("fragment", "footprint")) {
+peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_cutoff, high_coverage_cutoff, peak_width, paired_end_data = FALSE, strandedness = "stranded", scanbamparam = NULL, mapqFilter = 10, coverage_model = c("fragment", "footprint")) {
   coverage_model <- match.arg(coverage_model)
+  ## Validate strandedness at entry, before any BAM is read.
+  valid_strandedness <- c("stranded", "reversely_stranded")
+  if (!strandedness %in% valid_strandedness) {
+    stop("Invalid 'strandedness' value: '", strandedness,
+         "'. Feature prediction requires stranded data; must be one of: ",
+         paste(valid_strandedness, collapse = ", "),
+         ". ('unstranded' is valid for read counting but not for prediction.)",
+         call. = FALSE)
+  }
   ## Find all BAM files in the directory.
   if (bam_txt_list != ""){
     bam_files <- readLines(bam_txt_list)
@@ -176,14 +185,14 @@ peak_analysis <- function(View_line, high_cutoff, min_sRNA_length) {
 
 #' Extract major features from the annotation file
 #' 
-#' The function extracts parent features only; it also excludes all non-coding RNAs that are already annotated in the file.
+#' The function extracts parent features, plus any tRNA/rRNA rows (retained for masking even when child features); it also excludes non-coding RNAs already annotated in the file.
 #' 
 #' @param annotation_file  GFF3 genome annotation file.
 #' @param annot_file_directory The directory path for the annotation file (default is '.')
 #' @param target_strand A character string indicating the strand. Supports two valies; '+' and '-'.
 #' @param original_sRNA_annotation A string indicating how the biotype of pre-annotated ncRNA, which can be found in the attribute column.In case if the user does not know how the sRNA is annotated, it can be set as "unknown". In this case, all RNAs apart from tRNAs and rRNAs will be removed from the selection.
 #' 
-#' @return A dataframe with the major features from a set strand.
+#' @return A dataframe with the major features for a set strand, plus any tRNA/rRNA rows retained for masking.
 #' 
 #' @importFrom utils read.delim
 #' @export
@@ -200,8 +209,9 @@ major_features <- function(annotation_file, annot_file_directory = ".", target_s
     ori_sRNA_biotype <- paste0("biotype=", original_sRNA_annotation)
   }
   
-  ## Select only the major genomic features: remove all child features (like CDS, mRNA etc.), previously annotated sRNAs and extra features
-  major_f <- gff[!grepl("Parent", gff[,9], ignore.case = TRUE) & gff[,3]!='chromosome' & gff[,3]!='biological_region' & !grepl(ori_sRNA_biotype, gff[,9], ignore.case = TRUE) & gff[,3]!='region' & gff[,3]!='sequence_feature',]
+  ## Select the major genomic features: remove child features (CDS, mRNA etc.), previously annotated sRNAs and extra features, but retain tRNA/rRNA for masking.
+  is_trna_rrna <- gff[,3] %in% c("tRNA", "rRNA")
+  major_f <- gff[(!grepl("Parent", gff[,9], ignore.case = TRUE) & gff[,3]!='chromosome' & gff[,3]!='biological_region' & !grepl(ori_sRNA_biotype, gff[,9], ignore.case = TRUE) & gff[,3]!='region' & gff[,3]!='sequence_feature') | is_trna_rrna,]
   ## Select only major features for the target strand.
   m_strand_features <- data.frame()
   if (target_strand=="+") {
@@ -302,16 +312,33 @@ UTR_calc <- function(major_strand_features, target_strand, union_peak_ranges, mi
 #' 
 #' @export
 strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, major_strand_features) {
-  ## Collect GFF attributes whose ID could not be parsed, to report once after the loop.
+  ## Collect GFF attributes that carry no parseable ID, and any neighbour name that
+  ## comes back purely numeric (a wrong-match signature), to report each once after
+  ## the loop.
   unparsed_attrs <- character(0)
-  ## Parse a capture group from a GFF ID attribute, recording the attribute on no-match.
-  parse_id <- function(attr, pattern) {
-    parsed <- sub(pattern, "\\1", attr)
-    if (parsed == attr) {
+  numeric_ids    <- character(0)
+
+  ## Isolate the ID= value, bounded to the first ';', so the capture can never run
+  ## on into a later attribute such as Dbxref=GeneID:885041. Records the attribute
+  ## when no ID= token is present.
+  parse_id_token <- function(attr) {
+    token <- sub("ID=([^;]*).*", "\\1", attr)
+    if (token == attr) {
       unparsed_attrs <<- c(unparsed_attrs, attr)
     }
-    parsed
+    token
   }
+  ## Feature name: the part after the first ':' for an Ensembl type:name token, or
+  ## the whole token for a hyphen or bare ID (RefSeq gene-Rv0001, Prokka PROKKA_0001).
+  parse_name <- function(attr) {
+    name <- sub("^[^:]*:", "", parse_id_token(attr))
+    if (grepl("^[0-9]+$", name)) {
+      numeric_ids <<- c(numeric_ids, name)
+    }
+    name
+  }
+  ## Feature type: the part before the first ':' within the ID token.
+  parse_type <- function(attr) sub(":.*", "", parse_id_token(attr))
   
   ## Join the sRNA and UTR ranges together.
   sRNA_UTR <- c(sRNA_IRanges, UTR_IRanges)
@@ -337,20 +364,20 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
   cmp_strand <- cmp_strand[order(cmp_strand[,4]),]
   
   ## Set the previous feature name to be the ID of the last feature in the chromosome, accounting for the fact that bacterial genomes are circular.
-  previous_feature_name <- parse_id(cmp_strand[nrow(cmp_strand),9], "ID=.*?:(.*?);.*")
+  previous_feature_name <- parse_name(cmp_strand[nrow(cmp_strand),9])
   
   for (i in 1:nrow(cmp_strand)) {
     ## Determine feature type from the attribute column if the third column is empty.
-    feature_name <- parse_id(cmp_strand[i,9], "ID=.*?:(.*?);.*")
+    feature_name <- parse_name(cmp_strand[i,9])
     if (cmp_strand[i,3]==".") {
-      feature_type <- parse_id(cmp_strand[i,9], "ID=(.*?):.*?;.*")
+      feature_type <- parse_type(cmp_strand[i,9])
       cmp_strand[i,3] <- feature_type
       ## Find the name of the next feature in the annotation.
       next_feature_name <- c()
       if (i+1 <= nrow(cmp_strand)) {
-        next_feature_name <- parse_id(cmp_strand[i+1,9], "ID=.*?:(.*?);.*")
+        next_feature_name <- parse_name(cmp_strand[i+1,9])
       } else {
-        next_feature_name <- parse_id(cmp_strand[1,9], "ID=.*?:(.*?);.*")
+        next_feature_name <- parse_name(cmp_strand[1,9])
       }
       
       ## Build feature attribute column information for sRNAs and UTRs, including upstream and downstream features (with reagards to the strand).
@@ -369,12 +396,19 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
     previous_feature_name <- feature_name
   }
   
-  ## Report unparsable feature IDs once, as a single deduplicated summary.
+  ## Report rows with no parseable ID once, as a single deduplicated summary.
   if (length(unparsed_attrs) > 0L) {
     n_failed <- length(unique(unparsed_attrs))
     warning(paste0(n_failed, " of ", nrow(cmp_strand),
-                   " feature IDs could not be parsed from the GFF attribute column (e.g. ",
-                   unparsed_attrs[1], "); IDs should have the form ID=type:name;."),
+                   " feature rows had no parseable ID= attribute (e.g. ",
+                   unparsed_attrs[1], "); each feature row should carry an ID= tag."),
+            call. = FALSE, immediate. = TRUE)
+  }
+  ## Report purely-numeric neighbour names once: a parse wrong-match signature.
+  if (length(numeric_ids) > 0L) {
+    warning(paste0(length(unique(numeric_ids)),
+                   " feature name(s) parsed to a purely-numeric value (e.g. ",
+                   numeric_ids[1], "); this is a signature of an ID-parsing wrong-match."),
             call. = FALSE, immediate. = TRUE)
   }
   return(cmp_strand)
@@ -400,7 +434,7 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
 #' @param min_sRNA_length An integer indicating the minimum peak width/sRNA length.
 #' @param min_UTR_length An integer indicating the minimum UTR length.
 #' @param paired_end_data A boolean indicating if the reads are paired-end.
-#' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely stranded.
+#' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely stranded. Defaults to "stranded"; "unstranded" is rejected with an error.
 #' @param scanbamparam An optional \code{Rsamtools::ScanBamParam} object giving
 #'   full control of the BAM read filter. When \code{NULL} (the default) an
 #'   internal filter is built from \code{mapqFilter} plus alignment-flag
@@ -436,6 +470,16 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
 #' 
 #' @export
 feature_file_editor <- function(bam_directory = ".", bam_list = "", original_annotation_file, annot_file_dir = ".", output_file, original_sRNA_annotation, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, min_UTR_length, paired_end_data = FALSE, strandedness  = "stranded", scanbamparam = NULL, mapqFilter = 10, coverage_model = c("fragment", "footprint")) {
+  ## Validate strandedness at entry, before any filesystem work. peak_union_calc()
+  ## validates too, so a direct caller of that function is guarded as well.
+  valid_strandedness <- c("stranded", "reversely_stranded")
+  if (!strandedness %in% valid_strandedness) {
+    stop("Invalid 'strandedness' value: '", strandedness,
+         "'. Feature prediction requires stranded data; must be one of: ",
+         paste(valid_strandedness, collapse = ", "),
+         ". ('unstranded' is valid for read counting but not for prediction.)",
+         call. = FALSE)
+  }
   test <- list.files(path = bam_directory, pattern = "\\.BAM$", full.names = TRUE, ignore.case = TRUE)
   if (length(test) > 0){
     ## Load the original GFF once for the whole wrapper.
@@ -448,7 +492,9 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
     maj_plus_features <- major_features(gff_cache, annot_file_directory = annot_file_dir, "+", original_sRNA_annotation)
     plus_sRNA <- sRNA_calc(maj_plus_features, "+", plus_strand_peaks)
     plus_UTR <- UTR_calc(maj_plus_features, "+", plus_strand_peaks, min_UTR_length)
-    plus_annot_dataframe <- strand_feature_editor("+", plus_sRNA, plus_UTR, maj_plus_features)
+    ## tRNA/rRNA are masked (above) but dropped from the neighbour set, so neighbour fields are unchanged.
+    plus_neighbour_features <- maj_plus_features[!(maj_plus_features[,3] %in% c("tRNA", "rRNA")), ]
+    plus_annot_dataframe <- strand_feature_editor("+", plus_sRNA, plus_UTR, plus_neighbour_features)
     message("Built plus strand annotation dataframe")
     ## Minus strand
     minus_strand_peaks <- peak_sets$minus
@@ -456,7 +502,8 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
     maj_minus_features <- major_features(gff_cache, annot_file_directory = annot_file_dir, "-", original_sRNA_annotation)
     minus_sRNA <- sRNA_calc(maj_minus_features, "-", minus_strand_peaks)
     minus_UTR <- UTR_calc(maj_minus_features, "-", minus_strand_peaks, min_UTR_length)
-    minus_annot_dataframe <- strand_feature_editor("-", minus_sRNA, minus_UTR, maj_minus_features)
+    minus_neighbour_features <- maj_minus_features[!(maj_minus_features[,3] %in% c("tRNA", "rRNA")), ]
+    minus_annot_dataframe <- strand_feature_editor("-", minus_sRNA, minus_UTR, minus_neighbour_features)
     message("Built minus strand annotation dataframe")
   
     ## Creating the final annotation dataframe by combining both strand dataframe and adding missing information like child features from the original GFF3 file.
@@ -500,3 +547,4 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
 #commit7 completed
 #commit8 completed
 #commit9 completed
+#commit10 completed

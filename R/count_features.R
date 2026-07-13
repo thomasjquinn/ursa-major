@@ -1,3 +1,11 @@
+## Structural-RNA vocabulary for make_saf(): the feature types treated as tRNA
+## or rRNA when excl_rna = TRUE. Transcript-level types, gene-level types and
+## the biotype tag are all recognised, so the exclusion holds across annotation
+## sources (Ensembl tRNA_gene / rRNA_gene, flat Prokka/Bakta tRNA / rRNA,
+## and RefSeq/Ensembl biotype=tRNA / biotype=rRNA attributes).
+.bh_structural_rna_types      <- c("tRNA", "rRNA")
+.bh_structural_rna_gene_types <- c("tRNA_gene", "rRNA_gene")
+
 #' read_annotation_file function
 #'
 #' This function pastes together the path and filename of annotation file (if not in current directory) and tests file for existence.
@@ -123,13 +131,18 @@ make_saf <- function(ann_file, exclude=FALSE){
     major_f <- gff[!grepl("Parent", gff[,9], ignore.case = TRUE) &
                      gff[,3]!='chromosome' & gff[,3]!='biological_region' &
                      gff[,3]!='region' & gff[,3]!='sequence_feature',]
-  }else{ # if you want to exclude rRNA and tRNA features)
-    major_f <- gff[!grepl("Parent", gff[,9], ignore.case = TRUE) &
-                     gff[,3]!='chromosome' & gff[,3]!='biological_region' &
-                     gff[,3]!='region' &
-                     gff[,3]!='sequence_feature' &
-                     gff[,3]!='tRNA_gene' &
-                     gff[,3]!='rRNA_gene',]
+  }else{ # exclude structural RNA (tRNA/rRNA) across annotation sources
+    base_keep <- !grepl("Parent", gff[,9], ignore.case = TRUE) &
+                   gff[,3]!='chromosome' & gff[,3]!='biological_region' &
+                   gff[,3]!='region' & gff[,3]!='sequence_feature'
+    excluded  <- gff[,3] %in% c(.bh_structural_rna_types, .bh_structural_rna_gene_types) |
+                   grepl("biotype=(tRNA|rRNA)(;|$)", gff[,9])
+    if (!any(base_keep & excluded)) {
+      warning("excl_rna = TRUE but no tRNA or rRNA features were found to exclude; ",
+              "the annotation may contain none, or may use RNA type names or biotype ",
+              "tags this function does not recognise.", call. = FALSE, immediate. = TRUE)
+    }
+    major_f <- gff[base_keep & !excluded,]
   }
   saf_df <- as.data.frame(matrix(0, ncol=5, nrow=nrow(major_f)))
   colnames(saf_df) <- c("GeneID", "Chr", "Start", "End", "Strand")
@@ -242,3 +255,4 @@ count_features <- function(bam_dir=".",
 #commit7 completed
 #commit8 completed
 #commit9 completed
+#commit10 completed

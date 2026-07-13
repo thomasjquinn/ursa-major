@@ -1,6 +1,6 @@
 # ursa-major
 
-**Improving the speed and usability of baerhunter for identifying unannotated expressed regions in bacterial transcriptomes**
+**Improving the speed and usability of the baerhunter software for identifying unannotated expressed regions in bacterial transcriptomes**
 
 > ⚠️ **WORK IN PROGRESS**
 > This project is currently under active development. Some features may be incomplete.
@@ -11,7 +11,7 @@
 
 baerhunter is an R package that uses a coverage-based method to predict, annotate, and filter unannotated expressed regions, such as small RNAs (sRNAs) and untranslated regions (UTRs), from bacterial RNA-seq data. This project revisits the package to make it faster, more robust, and easier to use, while preserving its existing scientific output.
 
-The work is supervised by Dr Irilenia Nobeli at Birkbeck, University of London. So far, the updates have been validated against *Mycobacterium tuberculosis* H37Rv RNA-seq data, with additional paired-end testing on *Salmonella* Typhimurium. Additional tests are forthcoming.
+The work is supervised by Dr Irilenia Nobeli at Birkbeck, University of London. So far, the updates have been validated against *Mycobacterium tuberculosis* H37Rv RNA-seq data, with additional paired-end testing on *Salmonella* Typhimurium. The improved pipeline has since been applied to *Mycobacterium bovis* AF2122/97 RNA-seq data as a biological test case. Runtime has additionally been measured on paired-end *M. tuberculosis* H37Rv RNA-seq (run ERR2103718, from E-MTAB-6011 / PRJEB65014). Additional tests are forthcoming.
 
 ## Project goals
 
@@ -32,7 +32,7 @@ All other parts of the baerhunter package (the unchanged source files, including
 
 Because it is an overlay rather than a complete package, this repository will not install with `R CMD INSTALL` on its own. Instructions for applying these changes onto an upstream checkout, and for rebuilding the package documentation, are given in `documentation/integration/integration.md`.
 
-In-scope source files: `feature_file_editor.R`, `count_features.R`, and `tpm_norm_flagging.R`. `differential_expression.R` is not modified in this project and is recorded as future work.
+In-scope source files: `feature_file_editor.R`, `count_features.R`, and `tpm_norm_flagging.R`.
 
 ## Repository structure
 
@@ -58,6 +58,7 @@ ursa-major/
     ├── commit7_summary.md
     ├── commit8_summary.md
     ├── commit9_summary.md
+    ├── commit10_summary.md
     └── integration/        # applied at the end of the project
         └── integration.md
 ```

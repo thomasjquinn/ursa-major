@@ -3,6 +3,45 @@
 Development codename for the optimised version of baerhunter, tracking changes made
 relative to the `v0-baseline` tag (upstream v0.9.1).
 
+* Feature prediction now rejects an `"unstranded"` or otherwise unrecognised
+  `strandedness` value with an explicit error naming the offending value and the
+  accepted set, in place of the opaque failure that occurred when no strand
+  branch matched. The `peak_union_calc()` default changes from `"unstranded"` to
+  `"stranded"`, since unstranded was never a working prediction mode; read
+  counting still accepts `"unstranded"`, which remains a valid counting mode.
+
+* On RefSeq-style annotations the `upstream_feature` and `downstream_feature`
+  fields in the augmented GFF previously carried the wrong value (a `Dbxref`
+  number where the neighbouring gene row had one, otherwise that gene's whole
+  attribute block) and now carry the gene ID. Ensembl-style `type:name` IDs and
+  baerhunter's own predicted features are unchanged, and counts and TPM were
+  never affected, since quantification uses a separately bounded ID parse. Two
+  previously silent conditions are now reported: a warning if a feature name
+  parses to a purely numeric value, the signature of the old wrong-match, and
+  the existing unparsable-ID warning is reworded, now firing only on a feature
+  row carrying no `ID=` attribute at all.
+
+* `excl_rna = TRUE`, the default, now excludes tRNA and rRNA on all annotation
+  sources by recognising them from their biotype rather than only the legacy
+  Ensembl `tRNA_gene`/`rRNA_gene` type names. On RefSeq, modern Ensembl, and
+  flat Prokka or Bakta annotations, where the exclusion previously matched
+  nothing and silently kept those genes, the structural-RNA rows are now removed
+  from the count matrix and the TPM denominator, so every retained gene's TPM
+  rises (roughly 2.5-fold on the Cortes H37Rv arm, where tRNA and rRNA carry
+  about 60 per cent of the TPM budget). Legacy Ensembl annotations,
+  including the bundled vignette data, are unchanged, and a warning is now
+  emitted if `excl_rna = TRUE` finds nothing to exclude.
+
+* Pre-annotated tRNA and rRNA are now retained in the set of features masked
+  from the sRNA candidate search, rather than being masked only as a side effect
+  of the annotation's structure. Previously a tRNA or rRNA could be predicted as
+  a novel sRNA where its covering parent feature was absent or removed, as on
+  flat annotations with no gene-level parent. Those rows are filtered out of the
+  neighbour set passed to the annotation step, so the `upstream_feature` and
+  `downstream_feature` fields are unchanged. The effect on the predicted set is
+  monotone: it can remove a tRNA or rRNA candidate and may shift an adjacent
+  UTR, but it can never suppress a genuine novel sRNA.
+
 * Each GFF annotation is now read and parsed once per run and the result
   reused, via a new exported helper `load_gff_cache()`. The speed gain grows
   with annotation size. Predicted features, counts, TPM values, flags, and
