@@ -3,6 +3,28 @@
 Development codename for the optimised version of baerhunter, tracking changes made
 relative to the `v0-baseline` tag (upstream v0.9.1).
 
+* New optional module, Parameter Scout, which reports the coverage percentiles
+  of the intergenic regions for each BAM file so that `low_coverage_cutoff` and
+  `high_coverage_cutoff` can be chosen from the data rather than guessed. It is
+  run before the rest of the pipeline and ships as two files,
+  `parameter_scout_paired_end.R` and `parameter_scout_single_end.R`, exporting
+  `parameter_scout_paired_end()` or `parameter_scout_single_end()` alongside
+  `suggest_cutoffs()` and `plot_scout_distribution()`. Run the one that matches
+  the library: reading paired-end data through the single-end module counts each
+  mate as an independent record and inflates every number reported, and reading
+  single-end data through the paired-end module discards every read. A scan
+  writes a percentile table, a run-length summary of the coverage distribution,
+  two suggested cutoff pairs and a figure, and returns them invisibly. Coverage
+  is built under the same read filter and coverage model `peak_union_calc()`
+  uses, so the percentiles are on the scale the pipeline later applies; the
+  arguments controlling that must be given the same values in both places. The
+  module is advisory: it writes no annotation, sets no parameter and passes
+  nothing to the rest of the pipeline, so the chosen values are typed into
+  `feature_file_editor()` by hand. Nothing existing behaves differently, and
+  deleting the two files leaves the package unchanged. Until the packaging pass
+  they are loaded with `source()` rather than attached with the package. Full
+  instructions are in `parameter_scout_instructions.md`.
+
 * Feature prediction now rejects an `"unstranded"` or otherwise unrecognised
   `strandedness` value with an explicit error naming the offending value and the
   accepted set, in place of the opaque failure that occurred when no strand
