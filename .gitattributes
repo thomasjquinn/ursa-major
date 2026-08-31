@@ -10,5 +10,17 @@
 *.R    text eol=lf
 *.md   text eol=lf
 
-# Snapshot objects are binary: never apply line-ending conversion.
+# Generated package documentation.
+*.Rd   text eol=lf
+*.Rmd  text eol=lf
+
+# Bundled data: pin the endings rather than let them be inferred.
+*.gff3 text eol=lf
+*.txt  text eol=lf
+
+# Binary: never apply line-ending conversion. Alignment files and their
+# indexes are compressed, and a normalised BAM does not error, it produces
+# different coverage.
 *.rds  binary
+*.bam  binary
+*.bai  binary

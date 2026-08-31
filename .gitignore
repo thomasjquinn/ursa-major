@@ -13,6 +13,20 @@
 /*.tar.gz
 /*.Rcheck/
 *-Ex.R
+inst/doc/
+doc/
+Meta/
+
+# knitr and rmarkdown intermediates
+vignettes/*.html
+vignettes/*.pdf
+vignettes/*_cache/
+vignettes/*_files/
+*.knit.md
+*.utf8.md
+
+# Vignette run output, if run in place rather than in tempdir()
+output_BH_5_10/
 
 # Script backups and scratch files
 *.bak
