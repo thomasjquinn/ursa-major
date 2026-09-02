@@ -1,15 +1,15 @@
 #' Peak union calculation
 #' 
 #' 
-#' The function goes over each BAM file in the directory and finds the expression peaks that satisfy the coverage boundary and length criteria in each file. Then it unifies the peak information to obtain a single set of peak genomic coordinates.
+#' The function goes over each BAM file in the directory and finds the expression peaks that satisfy the coverage boundary and length criteria in each file. Then it unifies the peak information to obtain one set of peak genomic coordinates for each strand.
 #' 
 #' @param bam_location The directory containing BAM files.
 #' @param bam_txt_list Optional newline separated text file of filenames of bam files. File must be located in bam_location directory. 
-#' @param low_coverage_cutoff An integer indicating the low coverage threshold value.
-#' @param high_coverage_cutoff An integer indicating the high coverage threshold value.
-#' @param peak_width An integer indicating the minimum peak width.
+#' @param low_coverage_cutoff An integer indicating the low coverage threshold value. Inclusive: coverage equal to this value qualifies.
+#' @param high_coverage_cutoff An integer indicating the high coverage threshold value. Exclusive: coverage must be greater than this value.
+#' @param peak_width An integer indicating the minimum peak width. Exclusive: a peak must carry more than this many positions above the high cut-off.
 #' @param paired_end_data A boolean indicating if the reads are paired-end.
-#' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely stranded. Defaults to "stranded"; "unstranded" is rejected with an error.
+#' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely_stranded. Defaults to "stranded"; "unstranded" is rejected with an error.
 #' @param scanbamparam An optional \code{Rsamtools::ScanBamParam} object giving
 #'   full control of the BAM read filter. When \code{NULL} (the default) an
 #'   internal filter is built from \code{mapqFilter} plus alignment-flag
@@ -40,7 +40,7 @@
 #'   between them is left uncovered and the coverage reflects only the bases
 #'   that were actually sequenced.
 #' 
-#' @return A named list with two IRanges objects, `plus` and `minus`, holding the
+#' @return A named list with two IRanges objects, \code{plus} and \code{minus}, holding the
 #'   unified peak coordinates for each strand.
 #' 
 #' @import IRanges
@@ -80,7 +80,7 @@ peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_
     strand_rle <- strand_cvg[[target]]
     peaks <- IRanges::slice(strand_rle, lower = low_coverage_cutoff, includeLower = TRUE)
     ## Count, per peak, the positions above the high cut-off, then keep the peaks
-    ## whose count exceeds the minimum width. This reproduces the count-based test.
+    ## whose count exceeds the minimum width.
     above_high_rle <- strand_rle > high_coverage_cutoff
     above_high_views <- Views(above_high_rle, ranges(peaks))
     positions_above <- viewSums(above_high_views)
@@ -163,18 +163,17 @@ peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_
 
 #' Peak checking for the second coverage threshold and width.
 #' 
-#' This is a helper function that is used to examine if the peak had a continuous stretch of a given width that has coverage above the high cut-off value.
+#' This is a helper function that is used to examine whether the number of positions with coverage above the high cut-off value exceeds the given width. The positions need not be contiguous; contiguity is imposed by the low cut-off slice that produces the RleViews line.
 #' 
 #' @param View_line A line from a RleViews object.
-#' @param high_cutoff An integer indicating the high coverage threshold value.
-#' @param min_sRNA_length An integer indicating the minimum sRNA length (peak width).
+#' @param high_cutoff An integer indicating the high coverage threshold value. Exclusive: coverage must be greater than this value.
+#' @param min_sRNA_length An integer indicating the minimum sRNA length (peak width). Exclusive: the peak must carry more than this many positions above the high cut-off.
 #' 
 #' @return Returns a RleViews line if it satisfies conditions.
 #' 
 #' @export
 #' 
 peak_analysis <- function(View_line, high_cutoff, min_sRNA_length) {
-  ## This is a helper function that is used to examine if the peak had a continuous stretch of a given width that has coverage above the high cut-off value.
   cvg_string <- as.vector(View_line)
   target_peak <- which(cvg_string>high_cutoff)
   if (length(target_peak)>min_sRNA_length) {
@@ -187,12 +186,17 @@ peak_analysis <- function(View_line, high_cutoff, min_sRNA_length) {
 #' 
 #' The function extracts parent features, plus any tRNA/rRNA rows (retained for masking even when child features); it also excludes non-coding RNAs already annotated in the file.
 #' 
-#' @param annotation_file  GFF3 genome annotation file.
+#' @param annotation_file  Either a GFF3 genome annotation file or a pre-built GFF cache (see \code{load_gff_cache}).
 #' @param annot_file_directory The directory path for the annotation file (default is '.')
 #' @param target_strand A character string indicating the strand. Supports two valies; '+' and '-'.
 #' @param original_sRNA_annotation A string indicating how the biotype of pre-annotated ncRNA, which can be found in the attribute column.In case if the user does not know how the sRNA is annotated, it can be set as "unknown". In this case, all RNAs apart from tRNAs and rRNAs will be removed from the selection.
 #' 
 #' @return A dataframe with the major features for a set strand, plus any tRNA/rRNA rows retained for masking.
+#' @note By design this prediction filter excludes pre-annotated ncRNAs so they
+#'   are not re-discovered as novel features, tRNA and rRNA being retained for
+#'   masking. This is deliberately more aggressive than \code{make_saf()}
+#'   (quantification), which excludes only tRNA and rRNA so other annotated RNAs
+#'   are still counted.
 #' 
 #' @importFrom utils read.delim
 #' @export
@@ -429,12 +433,12 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
 #' @param annot_file_dir The directory containing the GFF3 annotation file.
 #' @param output_file A string containing the name of an output file.
 #' @param original_sRNA_annotation A string indicating how the biotype of pre-annotated ncRNA, which can be found in the attribute column.In case if the user does not know how the sRNA is annotated, it can be set as "unknown". In this case, all RNAs apart from tRNAs and rRNAs will be removed from the selection.
-#' @param low_coverage_cutoff An integer indicating the low coverage threshold value.
-#' @param high_coverage_cutoff An integer indicating the high coverage threshold value.
-#' @param min_sRNA_length An integer indicating the minimum peak width/sRNA length.
+#' @param low_coverage_cutoff An integer indicating the low coverage threshold value. Inclusive: coverage equal to this value qualifies.
+#' @param high_coverage_cutoff An integer indicating the high coverage threshold value. Exclusive: coverage must be greater than this value.
+#' @param min_sRNA_length An integer indicating the minimum peak width/sRNA length. Exclusive: a peak must carry more than this many positions above the high cut-off.
 #' @param min_UTR_length An integer indicating the minimum UTR length.
 #' @param paired_end_data A boolean indicating if the reads are paired-end.
-#' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely stranded. Defaults to "stranded"; "unstranded" is rejected with an error.
+#' @param strandedness A string outlining the type of the sequencing library: stranded, or reversely_stranded. Defaults to "stranded"; "unstranded" is rejected with an error.
 #' @param scanbamparam An optional \code{Rsamtools::ScanBamParam} object giving
 #'   full control of the BAM read filter. When \code{NULL} (the default) an
 #'   internal filter is built from \code{mapqFilter} plus alignment-flag
@@ -465,7 +469,7 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
 #'   between them is left uncovered and the coverage reflects only the bases
 #'   that were actually sequenced.
 #' 
-#' @return Outputs a new GFF3 file populated with predicted sRNAs and UTRs.
+#' @return The path to the output GFF3 file, returned invisibly. The written file is a new GFF3 populated with predicted sRNAs and UTRs.
 #'
 #' 
 #' @export
@@ -537,14 +541,3 @@ feature_file_editor <- function(bam_directory = ".", bam_list = "", original_ann
     stop("No BAMs in bam directory!")
   }
 }
-
-#commit1 completed
-#commit2 completed
-#commit3 completed
-#commit4 completed
-#commit5 completed
-#commit6 completed
-#commit7 completed
-#commit8 completed
-#commit9 completed
-#commit10 completed

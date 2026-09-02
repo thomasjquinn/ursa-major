@@ -146,14 +146,3 @@ tpm_flag_filtering <- function(flagged_annotation_file, target_features = c("put
   write.table(filtered_selection, output_file, sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE, append = TRUE)
 
 }
-
-#commit1 completed
-#commit2 completed
-#commit3 completed
-#commit4 completed
-#commit5 completed
-#commit6 completed
-#commit7 completed
-#commit8 completed
-#commit9 completed
-#commit10 completed

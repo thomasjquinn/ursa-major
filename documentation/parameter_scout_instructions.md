@@ -1,12 +1,10 @@
 # Parameter Scout: Instructions
 
-For Parameter Scout **Version 1.0**
-
 ---
 
 ## **What is Parameter Scout?**
 
-Parameter Scout is a simple R utility that helps you choose coverage cutoff parameters. This is an optional step you may run before the main baerhunter pipeline.
+Parameter Scout is a simple R utility that helps you choose coverage cutoff parameters. This is an optional step you may run before the main baerhunter pipeline. The methodology of Parameter Scout follows the intergenic coverage analysis that was outlined by Sivasankaran (2024).
 
 Picking the correct cutoff parameters often seems more like an art than a science. Parameter Scout measures the intergenic coverage in the BAM files and suggests two pairs of cutoff parameters based on the data itself.
 
@@ -14,22 +12,11 @@ baerhunter (Ozuna et al., 2020) requires both `low_coverage_cutoff` and `high_co
 
 Parameter Scout is only an advisory tool. It does not write an annotation file. It does not automatically set any parameter within baerhunter. Instead, it provides a picture of the data and possible coverage cutoff parameters. It does not pass anything to the rest of the pipeline. You still need to choose the cutoff parameters and edit `feature_file_editor()` yourself.
 
-If you already know what `low_coverage_cutoff` and `high_coverage_cutoff` your data needs, you do not need to run Parameter Scout at all.  
+If you already know what `low_coverage_cutoff` and `high_coverage_cutoff` your data needs, you do not need to run Parameter Scout at all.
 
-### There are two versions, and you need the right one
+### One file, one function
 
-Parameter Scout ships as two files:
-
-
-
-| file | use it when | the core function |
-| --- | --- | --- |
-| `parameter_scout_paired_end.R` | your reads are paired-end | `parameter_scout_paired_end()` |
-| `parameter_scout_single_end.R` | your reads are single-end | `parameter_scout_single_end()` |
-
-
-
-The two files are **almost identical**. They differ only in fifteen lines: the header, the name of the function you call, and one default setting. Everything else is the same code.
+Parameter Scout is a single file, `parameter_scout.R`, holding one core function, `parameter_scout()`. Whether your reads are paired-end or single-end is something you tell it with an argument, `paired_end_data`, rather than something you choose by loading a different file. Setting it is covered under **Setting `paired_end_data` for your reads**, after step 3.
 
 ---
 
@@ -64,7 +51,8 @@ From that aggregate row, two pairs are offered:
 
 
 
-The two sets of parameters (Median & P75; P75 & P80) follow the method outlined in Sivasankaran (2024).  
+The two sets of parameters (Median & P75; P75 & P80) follow the method outlined in Sivasankaran (2024).
+
 Notice that **P75 appears twice**: it is the high cutoff of the Relaxed pair and the low cutoff of the Stringent pair. One number is doing two jobs. Do not use it for both: a low and a high cutoff set to the same value is not one of the pairs offered here, and not a valid choice.
 
 ### The two cutoffs do not behave the same way
@@ -85,9 +73,8 @@ Parameter Scout is a starting point for exploring your data. Other cutoffs may s
 
 ### What you need installed first
 
-Parameter Scout **attaches** these packages for you when you load it. It cannot **install**
-them. If any one is missing, loading the module stops with a message naming it, so it is
-worth checking before you start.
+Parameter Scout needs these packages and does not install them. Attach them yourself
+before you load it, with the block in step 2.
 
 
 
@@ -98,7 +85,7 @@ worth checking before you start.
 | `GenomicRanges` | Bioconductor |
 | `GenomicAlignments` | Bioconductor |
 | `Rsamtools` | Bioconductor |
-| `Seqinfo` | Bioconductor. On older Bioconductor releases these functions live in `GenomeInfoDb` instead, and Parameter Scout attaches whichever you have |
+| `Seqinfo` | Bioconductor. On older Bioconductor releases these functions live in `GenomeInfoDb` instead |
 | `ggplot2` | CRAN |
 | `grid` | already installed: it comes with R |
 
@@ -138,8 +125,8 @@ install.packages("ggplot2")
 
 
 If `BiocManager` cannot find `Seqinfo`, your Bioconductor is an older one and the same
-functions are in `GenomeInfoDb`. Install that instead. Parameter Scout checks which of the
-two you have and uses it, so you do not need to tell it which.
+functions are in `GenomeInfoDb`. Install that instead. The block in step 2 attaches
+whichever of the two you have, so you do not need to edit it.
 
 Parameter Scout was built and tested on R 4.6.0 with Bioconductor 3.23, which is
 the setup to use if you have the choice. Its test suite also passes on R 4.3.3, so an
@@ -151,7 +138,7 @@ Use one folder for one dataset. It should hold:
 
 * the BAM files for that dataset, and no others
 * the GFF annotation file
-* `count_features.R`, `feature_file_editor.R`, and the Parameter Scout file (parameter\_scout\_paired\_end.R or parameter\_scout\_single\_end.R)
+* `count_features.R`, `feature_file_editor.R` and `parameter_scout.R`
 
 Then make that folder your working directory:
 
@@ -180,44 +167,59 @@ The run log records exactly which files were read, so you can check afterwards.
 
 **How many at once?** The tool is designed for **1 to 9 BAM files**. It stops with a message above nine.
 
-* If you want to **read the shape** of the distributions, scan **no more than 6 BAM files**. The figure is a fixed height whatever the number of files, so each distribution is drawn shorter as the count goes up. At nine they are too squashed to read, and reading the shape is what the figure asks you to do.  
+* If you want to **read the shape** of the distributions, scan **no more than 6 BAM files**. The figure is a fixed height whatever the number of files, so each distribution is drawn shorter as the count goes up. At nine they are too squashed to read, and reading the shape is what the figure asks you to do.
 * If you only want the **numbers**, nine BAM files is fine. The table and the suggested pairs are text, so nothing is lost.
 
-### Step 2\. Load the three files
+### Step 2\. Load the three files (parameter\_scout.R, feature\_file\_editor.R, and count\_features.R)
 
-Three lines. There are no `library()` calls here because Parameter Scout attaches the
-packages listed above itself, as soon as you load it.
+Attach the packages named in **What you need installed first**, then source the three
+files. Source them in the order shown: `parameter_scout.R` uses functions the other two
+define.
 
 
 
 ```
+suppressPackageStartupMessages({
+  library(S4Vectors)
+  library(IRanges)
+  library(GenomicRanges)
+  library(GenomicAlignments)
+  library(Rsamtools)
+  if (requireNamespace("Seqinfo", quietly = TRUE)) library(Seqinfo) else
+    library(GenomeInfoDb)
+  library(ggplot2)
+  library(grid)
+})
+
 source("count_features.R")           # supplies .resolve_gff_cache()
 source("feature_file_editor.R")      # supplies major_features()
-source("parameter_scout_paired_end.R")
+source("parameter_scout.R")
 ```
 
 
 
-All three files must be in your working directory, which is what step 1 set. Use
-`parameter_scout_single_end.R` on the third line if your reads are single-end.
+All three files must be in your working directory, which is what step 1 set.
 
 
 
 ### Step 3\. Run the scan
 
-Only two arguments have to be supplied. Everything else has a default.
+Two arguments have no default and must always be supplied: `annotation_file` and
+`original_sRNA_annotation`. **Two more have defaults that will be wrong for many
+libraries**, `paired_end_data` and `strandedness`, and the scan neither stops nor warns
+if you leave them wrong. Set all four unless you know the defaults suit your data.
 
-**Call the function that matches the file you loaded in step 2**:
-`parameter_scout_paired_end()` for paired-end reads,
-`parameter_scout_single_end()` for single-end. The arguments are the same either
-way, and the example below shows the paired-end one.
+There is one function to call, `parameter_scout()`, whatever kind of reads you
+have. The example below is for a paired-end library; the next section explains
+the `paired_end_data` line.
 
 
 
 ```
-scout <- parameter_scout_paired_end(
+scout <- parameter_scout(
   annotation_file          = "annotation.gff3",
   original_sRNA_annotation = "unknown",
+  paired_end_data          = TRUE,                   # FALSE for single-end
   strandedness             = "reversely_stranded")   # or "stranded"
 ```
 
@@ -236,6 +238,47 @@ tell you from a BAM file.
 
 Give `original_sRNA_annotation` the same value you will later give `feature_file_editor()`, so both stages measure the same regions.
 
+### Setting `paired_end_data` for your reads
+
+This is the one argument that differs between the two kinds of library. Picking
+the wrong boolean will distort the proposed parameters, or stop them being
+produced at all.
+
+
+
+| your reads | what to pass |
+| --- | --- |
+| single-end | `paired_end_data = FALSE`, or leave the argument out |
+| paired-end | `paired_end_data = TRUE` |
+
+
+
+**The default is `FALSE`**, which is single-end. That matches
+`feature_file_editor()`, and it fails in the safer direction: if you forget the
+argument on paired-end data you get single-end handling, which is wrong in a way
+you can see, rather than paired-end handling applied silently to single-end
+reads.
+
+**Give it the same value you will later give `feature_file_editor()`.** The
+cutoffs Parameter Scout suggests are measured on coverage built the way the
+pipeline builds it, so if the two stages disagree about the library the numbers
+do not transfer.
+
+**What `TRUE` changes.** Reads are read as pairs rather than singly, and only
+reads that are properly paired with a mapped mate are kept. Each pair then
+contributes one span of coverage instead of two separate reads, and the strand
+of the pair is taken from the mate that `strandedness` names.
+
+**What happens if you get it wrong.** `TRUE` on single-end data discards every
+read, because a single-end read is never properly paired: you get a warning that
+each file yielded no reads, `NA` percentiles, and no figure. That is loud, and it
+is the failure the default is chosen to give you rather than the quiet one.
+`FALSE` on paired-end data does not stop the scan, and this is the quiet failure. Each
+mate is counted as its own read, and the two mates of a pair carry opposite raw
+strands, so every pair is split across both strands and each intergenic region
+collects coverage that belongs to the other strand. **The percentiles come out three
+to four times too high**, and nothing in the output looks wrong.
+
 ### Step 4\. Wait
 
 The scan reads every BAM file once, which costs roughly the same as one `feature_file_editor()` pass. It is not quick on deep data and can take 3 minutes or more per BAM.
@@ -244,7 +287,7 @@ The scan reads every BAM file once, which costs roughly the same as one `feature
 
 The figure is the main output and the numbers are secondary. It has two parts:
 
-* a **table** of percentiles, one row per BAM file, with a bold **Median across BAMs** row at the bottom. The suggested cutoffs come from the bold row.  
+* a **table** of percentiles, one row per BAM file, with a bold **Median across BAMs** row at the bottom. The suggested cutoffs come from the bold row.
 * a **distribution** for each BAM file, drawn as a violin with a box plot below it, on a log2 scale, with dashed markers at P25, the median and P75 to make it easier to read.
 
 On a shallow library one of the three markers may be missing. That happens when
@@ -270,7 +313,7 @@ Both suggested cutoff pairs are written to `scout_suggestions.txt`, in the `scou
 | `scout_distribution.tsv` | the coverage values and their weights, split by file and strand |
 | `scout_suggestions.txt` | both pairs, written out to be copied by hand |
 | `scout_run_log.txt` | what was run: files, settings, R version, elapsed time |
-| `scout_figure_<label>.png` | the figure |
+| `scout_figure_<label>.png` | the figure, main visualisation |
 | `scout_figure_<label>.pdf` | the same figure, for printing |
 
 
@@ -281,16 +324,16 @@ Both suggested cutoff pairs are written to `scout_suggestions.txt`, in the `scou
 
 | what you see | what it means |
 | --- | --- |
-| `argument "annotation_file" is missing, with no default`, or the same for `original_sRNA_annotation` | these are the only two you must always supply. Everything else has a default |
+| `argument "annotation_file" is missing, with no default`, or the same for `original_sRNA_annotation` | these are the only two with no default, so they are the only two that stop the scan when omitted. `paired_end_data` and `strandedness` do have defaults and will not stop it, which is why they are set explicitly in step 3 |
 | `there is no package called ...` | that package is not installed. See the list above step 1 and install it |
 | `could not find function "major_features"` | you skipped the second `source()` line in step 2 |
-| `could not find function "parameter_scout_paired_end"`, or the same for `parameter_scout_single_end` | you loaded one of the two modules and called the other one's function. See step 3 |
+| `could not find function "parameter_scout"` | you skipped the third `source()` line in step 2 |
 | `Annotation file not found` | the GFF name is mistyped, or the file is not in your working directory |
 | `No BAM files found` | wrong folder, or nothing in it ends in `.bam`. Upper or lower case both count |
 | `Invalid 'strandedness' value` | you passed `"unstranded"`, which prediction cannot use |
 | a message about scanning up to 9 BAM files | you gave it ten or more. Scan in subsets, naming them with `bam_txt_list` |
 | `parameter scout expects a single reference sequence` | the BAM header lists more than one reference sequence. Parameter Scout handles single-chromosome genomes only |
-| a warning that a file `yielded no reads after filtering`, and `NA` percentiles | one file means that file is empty or badly filtered. Every file means the filter is wrong: check `mapqFilter` against your aligner, and check you are using the module that matches your reads, since the paired-end one discards single-end reads entirely |
+| a warning that a file `yielded no reads after filtering`, and `NA` percentiles | one file means that file is empty or badly filtered. Every file means the filter is wrong: check `mapqFilter` against your aligner, and check that `paired_end_data` matches your reads, since `TRUE` on single-end data discards every read |
 | the files are not where you expected | the working directory was not the folder you thought. The scan prints the full path of every file it writes, so check those and check `getwd()` |
 | the numbers look wrong for the dataset | check the run log for which BAM files were actually read |
 

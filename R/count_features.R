@@ -1,5 +1,5 @@
 ## Structural-RNA vocabulary for make_saf(): the feature types treated as tRNA
-## or rRNA when excl_rna = TRUE. Transcript-level types, gene-level types and
+## or rRNA when it is called with exclude = TRUE. Transcript-level types, gene-level types and
 ## the biotype tag are all recognised, so the exclusion holds across annotation
 ## sources (Ensembl tRNA_gene / rRNA_gene, flat Prokka/Bakta tRNA / rRNA,
 ## and RefSeq/Ensembl biotype=tRNA / biotype=rRNA attributes).
@@ -8,7 +8,7 @@
 
 #' read_annotation_file function
 #'
-#' This function pastes together the path and filename of annotation file (if not in current directory) and tests file for existence.
+#' This function joins the directory and filename of the annotation file and tests the result for existence.
 #'
 #' @param annot_dir Directory where genome annotation file is located
 #' @param annot_file  GFF3 or GTF genome annotation file
@@ -90,7 +90,7 @@ load_gff_cache <- function(annotation_file, annot_file_directory = ".") {
 #'
 #' This function translates the user-inputted strandedness parameter to the required integer input for strandSpecific arg of featureCounts.
 #'
-#' @param strand_param user input 'stranded' or 'reversely-stranded'
+#' @param strand_param user input 'unstranded', 'stranded' or 'reversely_stranded'
 #'
 #' @return strand_sp integer value
 #'
@@ -114,10 +114,15 @@ find_strandedness <- function(strand_param){
 #'
 #' This function converts gff file into simplified annotation format with 5 columns, appropriate for use in featureCounts/tpm_norm_flagging.
 #'
-#' @param ann_file A GFF3 annotation file.
-#' @param exclude A boolean to indicate whether or not to include rRNA/tRNA features
+#' @param ann_file Either a GFF3 annotation file or a pre-built GFF cache (see \code{load_gff_cache}).
+#' @param exclude A boolean to indicate whether or not to exclude rRNA/tRNA features
 #'
 #' @return A dataframe in Simplified Annotation Format
+#' @note By design this quantification filter excludes only tRNA and rRNA when
+#'   \code{exclude = TRUE}, keeping all other annotated RNAs so they are counted.
+#'   This is deliberately more permissive than \code{major_features()}
+#'   (prediction), which excludes all pre-annotated ncRNAs to avoid
+#'   re-discovering them.
 #'
 #' @importFrom stringr str_match
 #' @export
@@ -161,20 +166,20 @@ make_saf <- function(ann_file, exclude=FALSE){
 #' @param bam_dir The directory where bam files located
 #' @param annotation_dir The directory where annotation file is located
 #' @param annotation_file The complete annotation file: GFF3 or GTF genome annotation file
-#' @param output_dir The full directory path for CSV output files to be written
+#' @param output_dir The full directory path for the output files to be written. The files carry a .csv suffix but are tab-separated.
 #' @param output_filename The name for the output files--for example dataset name
 #' @param chromosome_alias_file A comma-delimited TXT file containing a character string with the chromosome names. This file has to have two columns: first with the chromosome name in the annotation file, second with the chromosome name in the BAM file.
-#' @param strandedness A string outlining the type of the sequencing library: unstranded, stranded, or reversely stranded.
+#' @param strandedness A string outlining the type of the sequencing library: unstranded, stranded, or reversely_stranded.
 #' @param is_paired_end A boolean indicating if the reads are paired-end.
 #' @param excl_rna A boolean indicating if misc RNA features (rRNA, tRNA) are excluded from quantification. (Defaults=TRUE)
-#' @param largest_overlap A boolean; if TRUE, assigns each read to the feature with the largest number of overlapping bases. Maps to featureCounts largestOverlap. Combined with the package's `fraction = TRUE`, Rsubread >= 2.14.0 is recommended, since earlier versions silently miscount that combination. (Default: FALSE)
+#' @param largest_overlap A boolean; if TRUE, assigns each read to the feature with the largest number of overlapping bases. Maps to featureCounts largestOverlap. Combined with the package's \code{fraction = TRUE}, Rsubread >= 2.14.0 is recommended, since earlier versions silently miscount that combination. (Default: FALSE)
 #' @param frac_overlap_feature Minimum fraction of a feature that must be overlapped before a read is assigned to it. Maps to featureCounts fracOverlapFeature. (Default: 0)
 #' @param read_to_pos Reduce each read to a single base before counting: 5 for the 5' end, 3 for the 3' end, or NULL to count the whole read. Maps to featureCounts read2pos. (Default: NULL)
-#' @param count_multi_mapping_reads A boolean; if FALSE, reads mapping to multiple locations are excluded from counts. Maps to featureCounts countMultiMappingReads. (Default: FALSE, reproducing 2019 behaviour)
+#' @param count_multi_mapping_reads A boolean; if FALSE, reads mapping to multiple locations are excluded from counts. Maps to featureCounts countMultiMappingReads. (Default: FALSE)
 #' @param count_read_pairs A boolean; for paired-end data, if TRUE each fragment is counted once rather than each mate separately. Ignored for single-end data. Maps to featureCounts countReadPairs. Requires Rsubread >= 2.4.3. (Default: TRUE)
 #' @param ... Optional parameters passed on to featureCounts(). Note that allowMultiOverlap and fraction are set internally to TRUE and cannot be overridden via ...
 #'
-#' @return Count tables for each feature are written into separate files, as well as the result summary.
+#' @return NULL, invisibly. Count tables for each feature are written into separate files, as well as the result summary.
 #'
 #' @import Rsubread
 #' @importFrom tools file_path_sans_ext
@@ -228,8 +233,7 @@ count_features <- function(bam_dir=".",
                       chrAliases = chromosome_alias_file,
                       strandSpecific = strand_specific,
                       isPairedEnd = paired_end,
-                      # countReadPairs requires Rsubread >= 2.4.3 (present in the 2.4.3 reference manual, RELEASE_3_12, 30 March 2021);
-                      # forwarded unconditionally, with the matching DESCRIPTION Imports floor added at the documentation commit.
+                      # countReadPairs requires Rsubread >= 2.4.3.
                       countReadPairs = count_read_pairs,
                       countMultiMappingReads = count_multi_mapping_reads,
                       allowMultiOverlap = TRUE,
@@ -245,14 +249,3 @@ count_features <- function(bam_dir=".",
 
   invisible(NULL)
 }
-
-#commit1 completed
-#commit2 completed
-#commit3 completed
-#commit4 completed
-#commit5 completed
-#commit6 completed
-#commit7 completed
-#commit8 completed
-#commit9 completed
-#commit10 completed
