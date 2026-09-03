@@ -76,7 +76,7 @@ load_gff_cache <- function(annotation_file, annot_file_directory = ".") {
 #'
 #' @return A GFF cache list (see \code{load_gff_cache}).
 #'
-#' @keywords internal
+#' @noRd
 .resolve_gff_cache <- function(x, annot_file_directory = ".") {
   if (is.list(x) &&
       all(c("path", "raw_lines", "parsed") %in% names(x))) {

@@ -121,7 +121,7 @@ tpm_flagging <- function(tpm_data, complete_annotation, output_file) {
 #' @return A GFF3 file where a target feature type is filtered by the expression flag of interest.
 #'
 #'
-#' @importFrom utils read.delim write.table
+#' @importFrom utils write.table
 #' @export
 tpm_flag_filtering <- function(flagged_annotation_file, target_features = c("putative_sRNA", "putative_UTR"), target_flag, output_file) {
 

@@ -1,29 +1,35 @@
-# baerhunter (ursa-major development version)
+# baerhunter 0.9.2.0000
 
-Development codename for the optimised version of baerhunter, tracking changes made
-relative to the `v0-baseline` tag (upstream v0.9.1).
+Development codename ursa-major. Changes are relative to upstream v0.9.1.
+
+**This fork does not include `differential_expression()`.** Upstream's wrapper
+around DESeq2 was outside the scope of this work by design and was never part
+of this repository. Run the differential-expression step with upstream
+baerhunter, or call DESeq2 directly on the count matrix `count_features()`
+produces.
 
 * New optional module, Parameter Scout, which reports the coverage percentiles
   of the intergenic regions for each BAM file so that `low_coverage_cutoff` and
   `high_coverage_cutoff` can be chosen from the data rather than guessed. It is
-  run before the rest of the pipeline and ships as two files,
-  `parameter_scout_paired_end.R` and `parameter_scout_single_end.R`, exporting
-  `parameter_scout_paired_end()` or `parameter_scout_single_end()` alongside
-  `suggest_cutoffs()` and `plot_scout_distribution()`. Run the one that matches
-  the library: reading paired-end data through the single-end module counts each
-  mate as an independent record and inflates every number reported, and reading
-  single-end data through the paired-end module discards every read. A scan
-  writes a percentile table, a run-length summary of the coverage distribution,
-  two suggested cutoff pairs and a figure, and returns them invisibly. Coverage
-  is built under the same read filter and coverage model `peak_union_calc()`
-  uses, so the percentiles are on the scale the pipeline later applies; the
-  arguments controlling that must be given the same values in both places. The
-  module is advisory: it writes no annotation, sets no parameter and passes
-  nothing to the rest of the pipeline, so the chosen values are typed into
-  `feature_file_editor()` by hand. Nothing existing behaves differently, and
-  deleting the two files leaves the package unchanged. Until the packaging pass
-  they are loaded with `source()` rather than attached with the package. Full
-  instructions are in `parameter_scout_instructions.md`.
+  run before the rest of the pipeline and ships as one file,
+  `parameter_scout.R`, exporting `parameter_scout()` alongside
+  `suggest_cutoffs()` and `plot_scout_distribution()`. The library type is the
+  `paired_end_data` argument rather than a choice of file, and it must match the
+  data: `TRUE` on single-end reads discards every read and reports `NA`
+  percentiles with a warning, while `FALSE` on paired-end reads counts each mate
+  as an independent record, splits every pair across both strands and inflates
+  every number reported, without stopping or warning. It defaults to `FALSE`,
+  matching `feature_file_editor()`. A scan writes a percentile table, a
+  run-length summary of the coverage distribution, two suggested cutoff pairs
+  and a figure, and returns them invisibly. Coverage is built under the same
+  read filter and coverage model `peak_union_calc()` uses, so the percentiles
+  are on the scale the pipeline later applies; the arguments controlling that
+  must be given the same values in both places. The module is advisory: it
+  writes no annotation, sets no parameter and passes nothing to the rest of the
+  pipeline, so the chosen values are typed into `feature_file_editor()` by hand.
+  Nothing existing behaves differently, and deleting the file leaves the package
+  unchanged. Full instructions are in
+  `documentation/parameter_scout_instructions.md`.
 
 * Feature prediction now rejects an `"unstranded"` or otherwise unrecognised
   `strandedness` value with an explicit error naming the offending value and the
@@ -65,7 +71,9 @@ relative to the `v0-baseline` tag (upstream v0.9.1).
   UTR, but it can never suppress a genuine novel sRNA.
 
 * Each GFF annotation is now read and parsed once per run and the result
-  reused, via a new exported helper `load_gff_cache()`. The speed gain grows
+  reused, via a new exported helper `load_gff_cache()`. The cache is a list with
+  three named elements, `path`, `raw_lines` and `parsed`, and any function
+  taking an annotation file will accept one in its place. The speed gain grows
   with annotation size. Predicted features, counts, TPM values, flags, and
   filtered output are unchanged for valid input.
 
@@ -152,10 +160,9 @@ relative to the `v0-baseline` tag (upstream v0.9.1).
   now matches a feature ID whether or not it carries a `type:` prefix, so
   annotations with bare or hyphen-delimited IDs, such as RefSeq-style GFFs, are
   flagged correctly rather than being silently skipped; for Ensembl-style IDs
-  the flagged output is unchanged. Two previously silent failures are now
+  the flagged output is unchanged. One previously silent failure is now
   reported: a warning is emitted if no feature ID matches the count table during
-  flagging, and a single summary warning if any feature IDs cannot be parsed
-  during strand annotation.
+  flagging.
 
 * Filtering flagged features now matches the chosen flag as a literal,
   case-sensitive string rather than a case-insensitive regular expression. The

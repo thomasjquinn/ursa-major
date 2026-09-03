@@ -19,7 +19,7 @@
 
 #' Maximum BAM files per scan; the reasoning is with \code{.check_bam_limit()}
 #'
-#' @keywords internal
+#' @noRd
 .BH_MAX_BAMS <- 9L
 
 
@@ -132,7 +132,7 @@ BOX_GAP  <- 0.14
 #' @param bam_location The directory containing BAM files.
 #' @param bam_txt_list Optional newline separated text file of BAM filenames.
 #' @return A character vector of BAM file paths.
-#' @keywords internal
+#' @noRd
 .list_bam_files <- function(bam_location = ".", bam_txt_list = "") {
   if (bam_txt_list != "") {
     bam_files <- readLines(bam_txt_list)
@@ -153,7 +153,7 @@ BOX_GAP  <- 0.14
 #' @param mapqFilter Integer. Minimum mapping quality; see
 #'   \code{\link{peak_union_calc}}.
 #' @return A \code{ScanBamParam}.
-#' @keywords internal
+#' @noRd
 .default_scanbamparam <- function(paired_end_data, mapqFilter = 10) {
   if (paired_end_data) {
     scanbamflag <- scanBamFlag(isUnmappedQuery = FALSE,
@@ -190,7 +190,7 @@ BOX_GAP  <- 0.14
 #' @param coverage_model "fragment" or "footprint".
 #' @return A list with \code{plus_reads}, \code{minus_reads}, \code{n_reads}
 #'   (alignments retained by the filter) and \code{seqinfo}.
-#' @keywords internal
+#' @noRd
 .strand_split_reads <- function(f, paired_end_data, strandedness,
                                 scanbamparam, coverage_model) {
   if (paired_end_data) {
@@ -233,7 +233,7 @@ BOX_GAP  <- 0.14
 #' @param percentiles The per-BAM percentile table.
 #' @return A data frame of one row per pair: \code{pair}, \code{low},
 #'   \code{high}, \code{from}.
-#' @keywords internal
+#' @noRd
 .cutoff_pairs <- function(percentiles) {
   need <- unique(c(PAIR_LOW, PAIR_HIGH))
   stopifnot("the percentile table lacks a column the offered pairs need" =
@@ -259,7 +259,7 @@ BOX_GAP  <- 0.14
 #' @param original_sRNA_annotation Biotype of pre-annotated ncRNA, or "unknown".
 #' @param bam_seqinfo A \code{Seqinfo} from the BAM header (single sequence).
 #' @return A list with slots \code{plus} and \code{minus}, each a GRanges.
-#' @keywords internal
+#' @noRd
 .igr_regions <- function(gff_cache, original_sRNA_annotation, bam_seqinfo) {
   stopifnot("parameter scout expects a single reference sequence" =
               length(seqnames(bam_seqinfo)) == 1)
@@ -300,7 +300,7 @@ BOX_GAP  <- 0.14
 #' @param reads A GAlignments (or GRanges) for one strand.
 #' @param igr_granges A GRanges of intergenic regions on that strand.
 #' @return An Rle of the coverage values inside \code{igr_granges}.
-#' @keywords internal
+#' @noRd
 .igr_coverage_rle <- function(reads, igr_granges) {
   cvg <- coverage(reads)                 # RleList keyed by seqname; BAM extends to seqlength
   if (length(igr_granges) == 0L) return(Rle(integer(0)))
@@ -319,7 +319,7 @@ BOX_GAP  <- 0.14
 #' @param probs Numeric vector of probabilities.
 #' @return A named numeric vector of quantiles, with attribute
 #'   \code{n_positions} (the number of non-zero positions).
-#' @keywords internal
+#' @noRd
 .rle_weighted_quantile <- function(x, probs) {
   v <- as.numeric(runValue(x))
   w <- as.numeric(runLength(x))
@@ -348,7 +348,7 @@ BOX_GAP  <- 0.14
 
 
 #' Column names for the percentile table
-#' @keywords internal
+#' @noRd
 .pct_colnames <- function(probs) {
   vapply(probs, function(p) {
     if (isTRUE(all.equal(p, 0.5))) "Median" else paste0("P", round(p * 100))
@@ -361,7 +361,7 @@ BOX_GAP  <- 0.14
 #' Internal. Collapses a coverage Rle to (value, weight) rows, dropping zeros,
 #' which is what a weighted violin needs without materialising every position.
 #'
-#' @keywords internal
+#' @noRd
 .rle_summary <- function(x, file, strand) {
   v <- as.numeric(runValue(x))
   w <- as.numeric(runLength(x))
@@ -393,7 +393,7 @@ BOX_GAP  <- 0.14
 #'
 #' @param v A numeric vector: one percentile column, one value per BAM.
 #' @return A single integer.
-#' @keywords internal
+#' @noRd
 .agg_percentile <- function(v) {
   as.integer(ceiling(stats::median(as.numeric(v), na.rm = TRUE)))
 }
@@ -411,7 +411,7 @@ BOX_GAP  <- 0.14
 #' @param n Integer. Number of BAM files, or rows in the percentile table.
 #' @param context "scan" or "figure", naming where the count came from.
 #' @return Invisibly TRUE, or stops.
-#' @keywords internal
+#' @noRd
 .check_bam_limit <- function(n, context = c("scan", "figure")) {
   context <- match.arg(context)
   if (!is.numeric(n) || length(n) != 1L || !is.finite(n) ||
@@ -443,7 +443,7 @@ BOX_GAP  <- 0.14
 #' text-mode connection translates the newline regardless. \code{scipen = 999}
 #' keeps large values out of scientific notation, and is restored on exit.
 #'
-#' @keywords internal
+#' @noRd
 .write_tsv_lf <- function(x, path) {
   old <- getOption("scipen")
   on.exit(options(scipen = old), add = TRUE)
@@ -456,7 +456,7 @@ BOX_GAP  <- 0.14
 }
 
 #' Write plain lines with LF endings
-#' @keywords internal
+#' @noRd
 .write_txt_lf <- function(lines, path) {
   con <- file(path, open = "wb")
   on.exit(close(con), add = TRUE)
@@ -475,7 +475,7 @@ BOX_GAP  <- 0.14
 #' @param elapsed_min Wall-clock minutes, or NA.
 #' @param label Short dataset name, recorded in the log.
 #' @return Invisibly, a named character vector of the absolute paths written.
-#' @keywords internal
+#' @noRd
 .write_scout_outputs <- function(scout, out_dir, bam_location = NA_character_,
                                  annotation_file = NA_character_,
                                  elapsed_min = NA_real_, label = NA_character_) {
@@ -731,7 +731,7 @@ parameter_scout <- function(bam_location = ".", bam_txt_list = "",
 #' files of the per-file median intergenic coverage and the high cutoff the
 #' median across files of the per-file upper quartile; \code{low} and
 #' \code{high} name any other columns. A fractional median is taken up to the
-#' next integer (see \code{.agg_percentile}).
+#' next integer.
 #'
 #' Returns numbers to inspect and record; it does not feed them into the
 #' pipeline.
@@ -783,9 +783,10 @@ suggest_cutoffs <- function(x, low = "Median", high = "P75") {
 #' @return Invisibly, a list with \code{table}, \code{plot} and \code{files}.
 #'
 #' @importFrom ggplot2 aes annotate coord_cartesian element_blank element_text
-#'   expansion geom_label geom_polygon geom_rect geom_segment geom_text
-#'   geom_vline ggplot labs scale_fill_manual scale_x_continuous
-#'   scale_y_continuous theme theme_minimal theme_void
+#' @importFrom ggplot2 expansion geom_label geom_polygon geom_rect
+#' @importFrom ggplot2 geom_segment geom_text geom_vline ggplot labs
+#' @importFrom ggplot2 scale_fill_manual scale_x_continuous scale_y_continuous
+#' @importFrom ggplot2 theme theme_minimal theme_void
 #' @export
 plot_scout_distribution <- function(scout = NULL,
                                     in_dir = NULL,

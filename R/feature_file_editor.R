@@ -46,7 +46,6 @@
 #' @import IRanges
 #' @import GenomicAlignments
 #' @import Rsamtools
-#' @importFrom utils capture.output read.csv read.delim write.table
 #'
 #' @export
 peak_union_calc <- function(bam_location = ".", bam_txt_list = "", low_coverage_cutoff, high_coverage_cutoff, peak_width, paired_end_data = FALSE, strandedness = "stranded", scanbamparam = NULL, mapqFilter = 10, coverage_model = c("fragment", "footprint")) {
@@ -198,7 +197,6 @@ peak_analysis <- function(View_line, high_cutoff, min_sRNA_length) {
 #'   (quantification), which excludes only tRNA and rRNA so other annotated RNAs
 #'   are still counted.
 #' 
-#' @importFrom utils read.delim
 #' @export
 major_features <- function(annotation_file, annot_file_directory = ".", target_strand, original_sRNA_annotation) {
   gff_cache <- .resolve_gff_cache(annotation_file, annot_file_directory)
@@ -472,6 +470,7 @@ strand_feature_editor <- function(target_strand, sRNA_IRanges, UTR_IRanges, majo
 #' @return The path to the output GFF3 file, returned invisibly. The written file is a new GFF3 populated with predicted sRNAs and UTRs.
 #'
 #' 
+#' @importFrom utils write.table
 #' @export
 feature_file_editor <- function(bam_directory = ".", bam_list = "", original_annotation_file, annot_file_dir = ".", output_file, original_sRNA_annotation, low_coverage_cutoff, high_coverage_cutoff, min_sRNA_length, min_UTR_length, paired_end_data = FALSE, strandedness  = "stranded", scanbamparam = NULL, mapqFilter = 10, coverage_model = c("fragment", "footprint")) {
   ## Validate strandedness at entry, before any filesystem work. peak_union_calc()
