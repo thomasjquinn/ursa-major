@@ -16,6 +16,7 @@
 | 12 | `commit12_summary.md` | `78c263e` | Configure Git handling for data and build output |
 | 13 | `commit13_summary.md` | `4e19f08` | Add upstream example data for package examples |
 | 14 | `commit14_summary.md` | `3b55003` | Merge parameter scout and audit production sources |
-| 15 | `commit15_summary.md` | | Package metadata, documentation and structure |
+| 15 | `commit15_summary.md` | `669d3d5` | Package metadata, documentation and structure |
+| 16 | `commit16_summary.md` | | Fix installation instructions and news deps |
 
-Commit 15 is the last commit, so its number could not be recorded.
+Commit 16 is the last commit, so its number could not be recorded.

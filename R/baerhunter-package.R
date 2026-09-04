@@ -13,8 +13,9 @@
 #' installs under the upstream package name, and its modified files keep
 #' their original paths, so the changes read as a scoped difference against
 #' upstream rather than as a new package. The changes are listed in
-#' \code{NEWS.md} and are readable after installation with
-#' \code{news(package = "baerhunter")}.
+#' \code{NEWS.md}, readable after installation with
+#' \code{news(package = "baerhunter")} where the \pkg{commonmark} and
+#' \pkg{xml2} packages are available, and on the repository otherwise.
 #'
 #' This fork does not include \code{differential_expression()}. Upstream's
 #' wrapper around DESeq2 was outside the scope of the work and is not part of

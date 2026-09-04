@@ -13,8 +13,9 @@ The work is supervised by Dr Irilenia Nobeli at Birkbeck, University of London. 
 ## Installation
 
 ```r
-# install.packages("remotes")
-remotes::install_github("thomasjquinn/ursa-major")
+install.packages(c("remotes", "BiocManager"))
+options(repos = BiocManager::repositories())
+remotes::install_github("thomasjquinn/ursa-major", upgrade = "never")
 ```
 
 The package installs as `baerhunter`, the same name as upstream:
@@ -25,7 +26,7 @@ packageVersion("baerhunter")
 #> '0.9.2.0000'
 ```
 
-It requires R >= 4.5 and a current Bioconductor installation. The dependency versions are declared in `DESCRIPTION`.
+The package requires R 4.5 or later and Bioconductor 3.22 or later. `install_github` resolves CRAN dependencies on its own but not Bioconductor ones, which is why the install block above sets `repos`. The dependency versions are declared in `DESCRIPTION`.
 
 ## What this is
 
@@ -96,6 +97,7 @@ ursa-major/
     ├── commit13_summary.md
     ├── commit14_summary.md
     ├── commit15_summary.md
+    ├── commit16_summary.md
     └── index.md
 ```
 
@@ -117,6 +119,6 @@ baerhunter is released under the MIT License. This repository preserves the orig
 
 ## Authors
 
-baerhunter was written by Alina Ozuna, and is maintained by Dr Irilenia Nobeli, with contributions from Jennifer Stiens. The modifications in this fork are by Thomas Quinn, MSc Bioinformatics, Birkbeck, University of London.
+baerhunter was written by Alina Ozuna, and is maintained by Dr Irilenia Nobeli, with contributions from Jennifer Stiens. The modifications in this fork are by Thomas Quinn.
 
 Email: [tquinn04@student.bbk.ac.uk](mailto:tquinn04@student.bbk.ac.uk) until 30 September 2026, and [thomquinn@gmail.com](mailto:thomquinn@gmail.com) from 1 October 2026.
